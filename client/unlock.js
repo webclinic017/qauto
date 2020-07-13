@@ -1,14 +1,14 @@
-var commons = require("common.js");
+var common = require("./common");
 
 main();
 
 function main() {
-    commons.toastLog(111);
-    var isLock = commons.unLock();
+    common.toastLog("正在解锁");
+    var isLock = common.unLock();
     // var isLock = true;
     while (isLock) {
-        isLock = commons.unLock();
-        commons.toastLog("休眠30s");
-        commons.sleep(30);
+        isLock = common.unLock();
+        common.toastLog("休眠30s");
+        common.sleep(30);
     }
 }

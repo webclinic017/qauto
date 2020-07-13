@@ -29,11 +29,15 @@ var config = {
 };
 
 function main() {
+    // code = "161716";
+    // money = 1000;
+    // applyForPurchase(code, money);
+    // return;
     commons.engineCheckAndWait();
     initJiSiLuFunds();
     var has_start_app = false;
     var storage_app = commons.storageApp();
-    var has_auto_ipo = storage_app.get("auto_ipo", false);
+    var has_auto_ipo = storage_app.get("autoIpo", false);
     if (!has_auto_ipo) {
         startApp();
         has_start_app = true;
@@ -43,7 +47,7 @@ function main() {
         commons.toastLog(msg);
     }
     var is_in_rt_time = checkInRTTime();
-    if (1) {
+    if (is_in_rt_time) {
         if (!has_start_app) {
             startApp();
         }
@@ -217,7 +221,7 @@ function initJiSiLuFunds() {
     storage_app.put(date_key, date);
     storage_app.put("funds", funds);
     storage_app.put("apply_funds", []);
-    storage_app.put("auto_ipo", false);
+    storage_app.put("autoIpo", false);
 }
 
 function getAllRT(code) {
@@ -808,7 +812,7 @@ function autIPO() {
         dismiss_ele.click();
     }
     var storage_app = commons.storageApp();
-    storage_app.put("auto_ipo", true);
+    storage_app.put("autoIpo", true);
     back();
     commons.sleep(1);
     back();

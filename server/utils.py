@@ -2,30 +2,41 @@
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
 import json
-import constant
 import models
-from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
 import math
-import datetime
+from datetime import datetime, timedelta
 import time
 import os
+
+from pprint import pprint
+import pyecharts.options as opts
+from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
 from pyecharts import options as opts
 from pyecharts.charts import Kline, Bar, Line, EffectScatter, Grid, Scatter
 import talib as ta
 import pandas as pd
 import tushare as ts
+import akshare as ak
+import backtrader as bt
 from bs4 import BeautifulSoup as bs
 import requests
 import gevent
 from gevent.pool import Pool
 import gevent.monkey
-from greenlet import greenlet
-gevent.monkey.patch_all(select=False)
+from sklearn import svm
+import numpy as np
+from analyzers import AccountValue
+
+import constant
+import remoteclient
 
 
 # %%
 # 处理pyecharts在notebook显示空白
 CurrentConfig.ONLINE_HOST = OnlineHostType.NOTEBOOK_HOST
+
+true = True
+false = False
 
 htmlpath = 'html'
 csvpath = 'csv'
@@ -34,23 +45,126 @@ for fdir in dirs:
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
+global_config = {}
+
+gevent.monkey.patch_all(select=false)
 
 # %%
+# https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
+# 股指期货: http://data.10jqka.com.cn/gzqh/index/instrumentId/IF2007/
+# http://www.cffex.com.cn/
+
+
+def get_all_futures():
+    jyfm_exchange_symbol_dict = ak.jyfm_exchange_symbol_dict()
+    pprint(jyfm_exchange_symbol_dict)
+
+
+def get_ak_data(symbol, start='', end=''):
+    # temp_url = ak.futures_global_commodity_name_url_map(sector="金属")
+    if not end:
+        end = get_datetime_date(flag='/')
+    if not start:
+        # start = '2000/06/22'
+        start = '2017/06/22'
+    df = ak.get_sector_futures(
+        sector="金属", symbol=symbol, start_date=start, end_date=end)
+    df['datetime'] = df.index
+    columns = {
+        '开盘': 'open',
+        '收盘': 'close',
+        '高': 'high',
+        '低': 'low',
+        '交易量': 'volume',
+        '涨跌幅': 'p_change',
+    }
+    for k, v in columns.items():
+        df.rename(columns={k: v}, inplace=true)
+    return df
+
+
 # 从tushare取数据,默认d,5min,60min
-def get_data_ts(code, start=None, end=None, freq='d', retry=0):
-    codestr = str(code)
-    df = ts.bar(codestr, conn=ts.get_apis(), start_date=start,
+# http://tushare.org/trading.html#id2
+# https://www.yisu.com/zixun/14379.html
+def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund'):
+    # ts.get_k_data
+    # ts.get_hist_data
+    # ts.bar
+    # ts.get_h_data
+    # pro = ts.pro_api()
+    # pro.query
+    # pro.fund_daily
+    # ts.pro_bar
+    df = ts.bar(code, conn=ts.get_apis(), start_date=start,
                 end_date=end, freq=freq)
     try:
         if df.empty:
             return pd.DataFrame()
     except Exception as ex:
         print(ex)
-        return pd.DataFrame()
-    df['code'] = df['code'].apply(lambda x: int(x))
-    df.rename(columns={'vol': 'volume'}, inplace=True)
+        retry += 1
+        if retry < 3:
+            print('get_ts_data 重试 {0} 次'.format(retry))
+            time.sleep(1.25)
+            return get_ts_data(code, start, end, freq, retry)
+        else:
+            return pd.DataFrame()
+    now = datetime.now()
+    if len(df) > 0 and is_trade_day() and now.hour < 17:
+        df.drop(df.index[0], inplace=true)
+    # print(df)
+    df['datetime'] = df.index
+    df['type'] = _type
+    df['createdtime'] = int(now.timestamp())
+    df.rename(columns={'vol': 'volume'}, inplace=true)
     df = df.sort_index()
-    # df = df[['open', 'high', 'low', 'close', 'volume', 'openinterest']]
+    return df
+
+
+def get_database_data(code, start='', end='', dbname='k_data'):
+    db = models.DB()
+    wheres = [
+        {'k': 'code', 'v': code, 'op': '='},
+    ]
+    if start:
+        where = {'k': 'datetime', 'v': start, 'op': '>='}
+        wheres.append(where)
+    if end:
+        if dbname != 'k_data':
+            end = get_datetime_date(datetime.strptime(
+                end, '%Y-%m-%d') + timedelta(days=1), flag='-')
+        where = {'k': 'datetime', 'v': end, 'op': '<='}
+        wheres.append(where)
+    orderby = 'timestamp asc'
+    df = db.select(dbname, wheres=wheres, orderby=orderby)
+    if df.empty:
+        return pd.DataFrame()
+    df.index = df['datetime']
+    if dbname == 'k_data':
+        df['code'] = df['code'].apply(lambda x: int(x)*10)
+    else:
+        df['code'] = df['code'].apply(lambda x: int(x))
+    return df
+
+
+def get_future_database_data(code, start='', end=''):
+    db = models.DB()
+    dbname = 'future'
+    wheres = [
+        {'k': 'code', 'v': code, 'op': '='},
+    ]
+    if start:
+        where = {'k': 'datetime', 'v': start, 'op': '>='}
+        wheres.append(where)
+    if end:
+        where = {'k': 'datetime', 'v': end, 'op': '<='}
+        wheres.append(where)
+    orderby = 'datetime asc'
+    df = db.select(dbname, wheres=wheres, orderby=orderby)
+    if df.empty:
+        return pd.DataFrame()
+    df.index = df['datetime']
+    # df['code'] = df['code'].apply(lambda x: int(x))
     return df
 
 
@@ -61,12 +175,30 @@ def get_code_cn(code):
 
 
 def get_float(f, n=3):
+    if not f:
+        return 0.0
     fstr = format(f, '.%sf' % n)
     return float(fstr)
 
 
+def addanalyzer(cerebro):
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='SharpeRatio',
+                        riskfreerate=0.00, stddev_sample=true, annualize=true)
+    cerebro.addanalyzer(bt.analyzers.Returns, _name="Returns")
+    cerebro.addanalyzer(bt.analyzers.AnnualReturn, _name='AnnualReturn')
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name='DW')
+
+    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='TradeAnalyzer')
+    cerebro.addanalyzer(AccountValue, _name='AccountValue')
+    # order记录
+    # analyzers.transactions.get_analysis()
+    cerebro.addanalyzer(bt.analyzers.Transactions, _name="transactions")
+
+
 # %%
 # 获取所有场内基金
+
+
 def get_all_etf():
     url = 'https://www.joinquant.com/help/api/getContent?name=fund'
     res = requests.get(url)
@@ -80,20 +212,45 @@ def get_all_etf():
             if len(z) == 0:
                 continue
             item = z[0].get_text()
-            code = int(item.split('.')[0])
+            code = item.split('.')[0]
             codes.append(code)
     return codes
 
 
+def get_my_etf():
+    codes = ['161716', '512170', '161226', '513050', '161005', '159941',
+             '163402', '513500', '159928', '163407', '166001', '512760']
+    # codes = ['163402', '166001', '161005']
+    return codes
+
+# 获取沪深300股票
+
+
+def get_hs300():
+    df = ts.get_hs300s()
+    codes = df.code.to_list()
+    return codes
+
+
 def get_db_etf():
-    con = models.DB()
-    sql = 'select distinct(code) from fund_info;'
-    ret = con.exec(sql)
-    mcodes = []
+    dbname = 'fund_info'
+    pk = 'code'
+    mcodes = get_distinct_codes(dbname, pk)
     jcodes = get_all_etf()
-    for y in ret:
-        mcodes.append(y[0])
     codes = list(set(mcodes).difference(set(jcodes)))
+    return codes
+
+
+def get_distinct_codes(table, pk, wheres=None):
+    db = models.DB()
+    codes = db.select_distinct(table, pk, wheres)
+    return codes
+
+
+def get_difference_codes(table, table2, pk):
+    ggtcodes = get_distinct_codes(table, pk)
+    kcodes = get_distinct_codes(table2, pk)
+    codes = list(set(kcodes).difference(set(ggtcodes)))
     return codes
 
 # %%
@@ -103,9 +260,12 @@ def get_db_etf():
 def getstratdata(strat, accountinfo):
     buy = []
     sell = []
-    for order in strat.orders:
-        date, tradetype = order.split(':')[0], order.split(':')[1]
-        if tradetype == 'buy':
+    # import ipdb; ipdb.set_trace()
+    for order in strat._orders:
+        datetime = order.data.num2date(order.dteos)
+        date = get_datetime_date(datetime, flag='-')
+        tradetype = order.__class__.__name__
+        if tradetype == 'BuyOrder':
             buy.append(date)
         else:
             sell.append(date)
@@ -123,31 +283,6 @@ def getstratdata(strat, accountinfo):
     }
 
 # %%
-# 检查优化策略结果
-
-
-def check_opt_result():
-    now = datetime.datetime.now()
-    results = []
-    pre_fix = 'csv/'
-    db = models.DB()
-    for fn in os.listdir(pre_fix):
-        if fn.endswith('.csv'):
-            y = fn.split('-')
-            dt = datetime.datetime(int(y[1]), int(y[2]), int(y[3][:-4]))
-            x = (now - dt).days / 365
-            df = pd.DataFrame(pd.read_csv(pre_fix + fn))
-            df = df.sort_values(by='value')
-            totalvalue = df.values[-1][1] / x
-            code = y[0]
-            codecn = get_code_cn(code)
-            df['code'] = int(code)
-            db.update(df, 'opt_strategy')
-            msg = '{0},{3}, return:{2}, start:{1}, {4}'.format(
-                y[0], str(dt), get_float(totalvalue, 3), codecn, df.values[-1].tolist())
-            print(msg)
-            results.append(msg)
-    return results
 
 
 def gen_minrises():
@@ -162,17 +297,19 @@ def gen_maxrises():
     for x in range(75, 500, 25):
         rises.append(x / 100)
     return rises
-
 # %%
 # http://gallery.pyecharts.org/#/Candlestick/professional_kline_chart
 # 画图
 
 
 def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalue=None, totalvalue=None):
-    df = get_data_ts(code, start=start, end=end)
-    title = get_code_cn(code)
-    df['datetime'] = df.index
-    date = df["datetime"].apply(lambda x: x.strftime('%Y-%m-%d')).tolist()
+    # df = get_ts_data(code, start=start, end=end)
+    df = get_database_data(code, start, end)
+    # title = get_code_cn(code)
+    title = ''
+    # df['datetime'] = df.index
+    # date = df["datetime"].apply(lambda x: ('%Y-%m-%d')).tolist()
+    date = df.datetime.apply(lambda x: x.strftime('%Y-%m-%d')).tolist()
     # volume = df["volume"].apply(lambda x: int(x)).tolist()
     kvalue = df.apply(lambda record: [
         record['open'], record['close'], record['low'], record['high']], axis=1).tolist()
@@ -192,24 +329,24 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
             ),
         )
         .set_global_opts(
-            xaxis_opts=opts.AxisOpts(is_scale=True),
+            xaxis_opts=opts.AxisOpts(is_scale=true),
             yaxis_opts=opts.AxisOpts(
-                is_scale=True,
+                is_scale=true,
                 splitarea_opts=opts.SplitAreaOpts(
-                    is_show=True,
+                    is_show=true,
                     areastyle_opts=opts.AreaStyleOpts(opacity=1)
                 ),
             ),
             datazoom_opts=[
                 opts.DataZoomOpts(
-                    is_show=False,
+                    is_show=false,
                     type_="inside",
                     xaxis_index=[0, 1],
                     range_start=slideroffset,
                     range_end=100,
                 ),
                 opts.DataZoomOpts(
-                    is_show=True,
+                    is_show=true,
                     xaxis_index=[0, 1],
                     type_="slider",
                     pos_top="80%",
@@ -220,7 +357,7 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
             ],
             title_opts=opts.TitleOpts(title="{0}: 行情走势图".format(title)),
             axispointer_opts=opts.AxisPointerOpts(
-                is_show=True,
+                is_show=true,
                 link=[{"xAxisIndex": "all"}],
                 label=opts.LabelOpts(background_color="#777"),
                 # label=opts.LabelOpts(formatter='{value}'),
@@ -239,9 +376,9 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
         msg = 'MA{0}'.format(period)
         (line
          .set_global_opts(title_opts=msg)
-         .add_yaxis(msg, ma, is_symbol_show=False, label_opts=opts.LabelOpts(is_show=False), is_smooth=True,
+         .add_yaxis(msg, ma, is_symbol_show=false, label_opts=opts.LabelOpts(is_show=false), is_smooth=true,
                     linestyle_opts=opts.LineStyleOpts(width=2, opacity=0.5),
-                    is_hover_animation=True,)
+                    is_hover_animation=true,)
          .set_global_opts(xaxis_opts=opts.AxisOpts(type_="category"))
          )
     # 买入,卖出信号
@@ -275,7 +412,7 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
         init_opts=opts.InitOpts(
             width="1250",
             height="750px",
-            animation_opts=opts.AnimationOpts(animation=False),
+            animation_opts=opts.AnimationOpts(animation=false),
         )
     )
 
@@ -288,23 +425,23 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
     accountgrph = Line()
     accountgrph.add_xaxis(date)
     if availablevalue:
-        msg = '可用余额'
+        msg = ''
         (
             accountgrph
             .set_global_opts(title_opts='')
-            .add_yaxis(msg, availablevalue, is_symbol_show=False, label_opts=opts.LabelOpts(is_show=False), is_smooth=True,
+            .add_yaxis(msg, availablevalue, is_symbol_show=false, label_opts=opts.LabelOpts(is_show=false), is_smooth=true,
                        linestyle_opts=opts.LineStyleOpts(width=2, opacity=0.5),
-                       is_hover_animation=True,)
+                       is_hover_animation=true,)
             .set_global_opts(xaxis_opts=opts.AxisOpts(type_="category"))
         )
     if totalvalue:
-        msg = '账户总额'
+        msg = ''
         (
             accountgrph
             .set_global_opts(title_opts='')
-            .add_yaxis(msg, totalvalue, is_symbol_show=False, label_opts=opts.LabelOpts(is_show=False), is_smooth=True,
+            .add_yaxis(msg, totalvalue, is_symbol_show=false, label_opts=opts.LabelOpts(is_show=false), is_smooth=true,
                        linestyle_opts=opts.LineStyleOpts(width=2, opacity=0.5),
-                       is_hover_animation=True,)
+                       is_hover_animation=true,)
             .set_global_opts(xaxis_opts=opts.AxisOpts(type_="category"))
         )
     if accountgrph:
@@ -318,34 +455,310 @@ def plot_strategy(code, start=None, end=None, buy=None, sell=None, availablevalu
     # print(kline.render('{0}.html'.format(code)))
 
 
-def update_daily_per_code(code, start='', con=None, db_name=''):
-    print('start...{0},date...{1}'.format(code, start))
-    data = get_data_ts(code, start=start)
-    if data.empty:
-        print('{0},未获得数据'.format(code))
+# %%
+def plot_account_value(strat):
+    accountinfo = strat.analyzers.AccountValue.get_analysis()
+    info = {}
+    for k in accountinfo.keys():
+        datay = [y for _, y in accountinfo[k].items()]
+        info[k] = datay
+    info['datax'] = [x for x, _ in accountinfo[k].items()]
+    line = (
+        Line()
+        .add_xaxis(xaxis_data=info['datax'])
+        .add_yaxis(
+            series_name="账户余额",
+            stack="总量",
+            y_axis=info['totalvalue'],
+            is_smooth=true,
+            label_opts=opts.LabelOpts(is_show=false),
+            areastyle_opts=opts.AreaStyleOpts(opacity=0.5),
+            linestyle_opts=opts.LineStyleOpts(width=2),
+            is_symbol_show=false,
+            # markpoint_opts=opts.MarkPointOpts(
+            #     data=[opts.MarkPointItem(type_="max")]),
+        )
+        .set_global_opts(
+            tooltip_opts=opts.TooltipOpts(
+                trigger="none", axis_pointer_type="cross"),
+            xaxis_opts=opts.AxisOpts(
+                type_="category",
+                axistick_opts=opts.AxisTickOpts(is_align_with_label=true),
+                axisline_opts=opts.AxisLineOpts(
+                    is_on_zero=false, linestyle_opts=opts.LineStyleOpts(
+                        color="#d14a61")
+                ),
+            ),
+            yaxis_opts=opts.AxisOpts(
+                type_="value",
+                splitline_opts=opts.SplitLineOpts(
+                    is_show=true, linestyle_opts=opts.LineStyleOpts(opacity=1)
+                ),
+            ),
+        )
+    )
+    grid_chart = Grid(
+        init_opts=opts.InitOpts(
+            width="1300",
+            height="600px",
+            animation_opts=opts.AnimationOpts(animation=false),
+        )
+    )
+    grid_chart.add(
+        line,
+        grid_opts=opts.GridOpts(
+            # pos_left="10%", pos_right="8%", height="12%"
+        ),
+    )
+    print(grid_chart.render())
+
+# %%
+# 北向资金,跟着北向资金买股
+# 东方财富: https://emdatah5.eastmoney.com/dc/hsgtn/index
+# https://emdatah5.eastmoney.com/dc/hsgtn/topten?date=2020-06-22
+# 同花顺: http://data.10jqka.com.cn/hgt/hgtb/
+# backtrader组合策略: https://blog.csdn.net/ndhtou222/article/details/106416802
+
+
+def ggt_top10(date):
+    print('start...', date)
+    stys = {
+        'SGT': 'MarketType%3D3',
+        'HGT': 'MarketType%3D1',
+    }
+    dfs = []
+    for k, v in stys.items():
+        url = 'https://emdatah5.eastmoney.com/dc/HSGTN/GetTenTopData?sty={}&filter=(DetailDate%3D%5E{}%5E)({})'.format(
+            k, date, v)
+        res = requests.get(url)
+        content = str(res.content, encoding='utf8')
+        content = json.loads(content[23:-2])
+        df = pd.DataFrame(content)
+        dfs.append(df)
+    df = contact_pandas(dfs)
+    if df.empty:
         return
-    con.update(data, db_name)
+    df['datetime'] = df['DetailDate'].apply(
+        lambda x: datetime.strptime(x[:10], '%Y-%m-%d'))
+    for x in ['Rank1']:
+        df[x] = df[x].apply(lambda x: x.replace('-', ''))
+    df['timestamp'] = df['datetime'].apply(
+        lambda x: int(x.timestamp() - 8*60*60))
+    for x in df.columns:
+        y = x.lower()
+        df.rename(columns={x: y}, inplace=true)
+    dbname = 'ggt'
+    db = models.DB()
+    print(date, df)
+    pks = ['code', 'markettype', 'timestamp']
+    db.insert(df, dbname, pks)
+
+
+def contact_pandas(dfs):
+    for df in dfs:
+        df.reset_index(drop=true, inplace=true)
+    newdfs = pd.concat(dfs, axis=0, ignore_index=true)
+    return newdfs
+
+
+def update_k_1min_data(codes, db, dbname):
+    df = ts.get_realtime_quotes(codes)
+    try:
+        if df.empty:
+            return pd.DataFrame()
+    except Exception as ex:
+        print(ex)
+        return pd.DataFrame()
+    if df.empty:
+        print('空数据')
+        return
+    df['datetime'] = df[['date', 'time']].apply(
+        lambda x: datetime.strptime('{0} {1}'.format(
+            x['date'], x['time']), '%Y-%m-%d %H:%M:%S'),
+        axis=1,
+    )
+    df['timestamp'] = df['datetime'].apply(
+        lambda x: int(x.timestamp()) - 8*60*60,
+    )
+    df.rename(columns={'vol': 'volume'}, inplace=true)
+    fits = ['code', 'name', 'timestamp', 'datetime', 'date', 'time', 'pre_close', 'open',
+            'high', 'low', 'price', 'volume', 'amount']
+    for fit in df.columns:
+        if fit not in fits:
+            df.drop([fit], axis=1, inplace=true)
+    pks = ['name', 'date', 'time', 'code']
+    db.insert(df, dbname, pks)
+
+
+def get_code_string(code):
+    code = "{0:06d}".format(int(code))
+    return code
+
+
+def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type='fund', init=false):
+    print('start...{0},date...{1}'.format(code, start))
+    code = get_code_string(code)
+    df = get_ts_data(code, start=start, end=end, _type=_type, freq=freq)
+    if df.empty:
+        print('{0},未获得数据'.format(code))
+        return pd.DataFrame()
+    # 时区设置不一致
+    df['timestamp'] = df['datetime'].apply(
+        lambda x: int(x.timestamp()) - 8*60*60,
+    )
+    wheres = [{'k': 'code', 'v': code}]
+    if init:
+        print('初始化 {} {}'.format(code, dbname))
+        db.delete(dbname, wheres)
+    count = db.select_count(dbname, wheres=wheres)
+    if count > 0:
+        pks = ['timestamp', 'code', 'type']
+        isempty = db.insert(df, dbname, pks)
+    else:
+        isempty = db.insert(df, dbname)
+    return isempty
+
+
+def update_k_5min_data(code, start='', db=None, dbname='k_5min_data', init=false):
+    if not init:
+        start = get_datetime_date(flag='-')
+    else:
+        start = ''
+    freq = '5min'
+    isempty = update_one_code(code, start=start, db=db,
+                              dbname=dbname, freq=freq, init=init)
+    return isempty
+
+
+def update_k_data(code, start='', db=None, dbname='k_data', init=false):
+    if not init:
+        start = get_datetime_date(
+            datetime.now() + timedelta(days=-3), flag='-')
+    else:
+        start = ''
+    freq = 'D'
+    update_one_code(code, start=start, db=db,
+                    dbname=dbname, freq=freq, init=init)
+
+
+def update_future():
+    symbols = {
+        '黄金': 'gold',
+        '白银': 'silver',
+        # 'WTI原油': 'wit_oil'
+    }
+    dbname = 'future'
+    db = models.DB()
+    for k, v in symbols.items():
+        df = get_ak_data(k)
+        df['symbol'] = v
+        pks = ['datetime', 'symbol']
+        db.insert(df, dbname)
 
 
 def update_daily(start=''):
-    con = models.DB()
-    db_name = 'k_data'
-    now = datetime.datetime.now()
-    if not start:
-        start = '{0}-{1}-{2}'.format(now.year, now.month, now.day)
-    print('开始...')
-    codes = get_all_etf()
-    async_tasks(update_daily_per_code, codes,
-                start=start, con=con, db_name=db_name)
-    print('end...')
+    db = models.DB()
+    dbnames = ['k_60min_data', 'k_data']
+    # dbnames = ['k_5min_data']
+    import constant
+    for dbname in dbnames:
+        now = datetime.now()
+        # if not start:
+        #     start = get_datetime_date(now + timedelta(days=-3), flag='-')
+        start = None
+        print('开始...')
+
+        if dbname == 'k_5min_data':
+            freq = '5min'
+        else:
+            freq = 'D'
+
+        codes = [x for x in constant.trade_funds]
+        for code in codes:
+            update_one_code(code, start=start, db=db,
+                            dbname=dbname, freq=freq)
+
+        # async_tasks(update_one_code, codes,
+        #             start=start, db=db, dbname=dbname, freq=freq)
+        print('end...')
+
+
+def back_up():
+    types = ['fund', 'stock']
+    for _type in types:
+        dbname = 'k_data'
+        pk = 'code'
+        wheres = [
+            {'k': 'type', 'v': _type}
+        ]
+        codes = get_distinct_codes(dbname, pk, wheres=wheres)
+        async_tasks(update_one_code, codes,
+                    start=start, db=db, dbname=dbname, _type=_type)
+
+    codes = get_difference_codes('k_data', 'ggt', 'code')
+    kcodes = get_distinct_codes('k_data', 'code')
+    etfcodes = get_all_etf()
+    codes = list(set(etfcodes).difference(set(kcodes)))
+
+
+def get_trade_days():
+    pro = ts.pro_api()
+    tradedays = global_config.get('tradedays', [])
+    if not tradedays:
+        now = datetime.now()
+        now = now + timedelta(days=-365*10)
+        start_date = get_datetime_date(now)
+        data = pro.query('trade_cal', start_date=start_date, is_open='1')
+        # exchange默认为上交所,start_date和end_date不是必填,is_open不填是全部,is_open可以使用0和1,0为不交易的日期,1为交易日
+        tradedays = data['cal_date'].to_list()
+        global_config['tradedays'] = tradedays
+    return tradedays
+
+
+def get_last_trade_day(day=None, _type='timestamp'):
+    if not day:
+        now = datetime.now()
+    else:
+        now = day
+    istradeday = is_trade_day(now)
+    count = 0
+    dt = now
+    while not istradeday:
+        count -= 1
+        dt = now + timedelta(days=count)
+        istradeday = is_trade_day(dt)
+    dtstr = get_datetime_date(dt)
+    tradedays = get_trade_days()
+    for index, trade_day in enumerate(tradedays):
+        if trade_day == dtstr:
+            lastdaystr = tradedays[index-1]
+    lastday = datetime.strptime(lastdaystr, '%Y%m%d')
+    if _type == 'timestamp':
+        return int(lastday.timestamp())
+    elif _type == 'datetime':
+        return lastday
+    elif _type == 'date':
+        return lastdaystr
+    elif _type == 'date_ex':
+        return get_datetime_date(lastday, flag='-')
+
+
+def is_trade_day(day=None):
+    # 参考地址:https://tushare.pro/document/2?doc_id=26
+    if day:
+        now = day
+    else:
+        now = datetime.now()
+    dt = get_datetime_date(now)
+    tradedays = get_trade_days()
+    istradeday = false
+    for trade_day in tradedays:
+        if trade_day == dt:
+            istradeday = true
+            break
+    return istradeday
 
 # %%
-
-
-def fetch(i, start=0):
-    url = 'http://httpbin.org/get'
-    resp = requests.get(url)
-    print(len(resp.text), i, start)  # 返回结果长度，以及序号
 
 
 def async_tasks(func, tasks, *args, **kw):
@@ -358,7 +771,7 @@ def async_tasks(func, tasks, *args, **kw):
     gevent.joinall(greenlets)
 
 
-def get_morning_star(first=True, data={}):
+def get_morning_star(first=true, data={}):
     url = 'http://cn.morningstar.com/quickrank/default.aspx'
     headers = {
         'Content-Type': "application/x-www-form-urlencoded",
@@ -410,33 +823,169 @@ def get_morning_star(first=True, data={}):
             item = {}
             y = x.find_all('td')
             z = y[2]
-            code = int(z.get_text())
-            quicktake = z.a.get('href', '').split('/')[-1]
+            code = z.get_text()
+            quick_take = z.a.get('href', '').split('/')[-1]
             code_cn = y[3].get_text()
             code_type = y[4].get_text()
             item = {
                 'code': code,
-                'quick_take': quicktake,
+                'quick_take': quick_take,
                 'code_cn': code_cn,
                 'code_type': code_type,
                 'source': 'morningstar',
             }
             df = pd.DataFrame([item])
-            db.update(df, 'fund_info')
+            db.insert(df, 'fund_info')
             print(item)
 
     print(record_num)
     print(num_str)
-    get_morning_star(first=False, data=data)
+    get_morning_star(first=false, data=data)
+
+
+def get_datetime_date(now=None, flag='', days=0):
+    if not now:
+        now = datetime.now()
+    if days:
+        now += timedelta(days=days)
+    if not flag:
+        return now.strftime('%Y%m%d')
+    elif flag == '-':
+        return now.strftime('%Y-%m-%d')
+    elif flag == '/':
+        return now.strftime('%Y/%m/%d')
+
+
+def get_dt_date(dt, flag=''):
+    datetime = bt.num2date(dt)
+    return get_datetime_date(datetime, flag=flag)
+
+
+def update_index_daily(init=false):
+    # 官网市盈率: http://www.csindex.com.cn/zh-CN/downloads/industry-price-earnings-ratio?type=zy1
+    # 获取综指历史行情
+    pro = ts.pro_api()
+    # names = ['上证综指', '深证成指', '上证50', '中证500', '中小板指', '创业板指']
+    dbname = 'index_dailybasic'
+    db = models.DB()
+    now = datetime.now() + timedelta(days=-5)
+    dt = get_datetime_date(now)
+    df = pro.index_dailybasic(trade_date=dt)
+    if not df.empty:
+        codes = df['ts_code'].values
+        pks = ['ts_code', 'trade_date']
+        db.insert(df, dbname, pks)
+        for code in codes:
+            da = pro.index_daily(trade_date=dt, ts_code=code)
+            dbname = 'index_daily'
+            if not da.empty:
+                db.insert(da, dbname, pks)
+    if init:
+        lastdaystr = get_last_trade_day()
+        df = pro.index_dailybasic(trade_date=lastdaystr)
+        codes = df['ts_code'].values
+        for code in codes:
+            da = pro.index_dailybasic(ts_code=code)
+            db.insert(da, dbname)
+            lastday = int(da['trade_date'].values[-1]) - 1
+            # print(lastday)
+            da = pro.index_dailybasic(ts_code=code, end_date=str(lastday))
+            while not da.empty:
+                db.insert(da, dbname)
+                lastday = int(da['trade_date'].values[-1]) - 1
+                da = pro.index_dailybasic(ts_code=code, end_date=str(lastday))
+            print('{0},end'.format(code))
+
+
+def get_filter_hs300():
+    db = models.DB()
+    dbname = 'k_data'
+    codes = db.select_distinct(dbname, 'code')
+    df = ts.get_stock_basics()
+    filtercodes = []
+    # df.groupby('industry').name.nunique()
+    for code in codes:
+        t = df.query('code=="{}"'.format(code))
+        if t.empty:
+            continue
+        industry = t.industry[0]
+        if industry not in ['证券', 'IT设备', '中成药']:
+            filtercodes.append(code)
+    print(filtercodes)
+    return filtercodes
+
+
+def check_and_delete_record():
+    db = models.DB()
+    dbname = 'k_data'
+    pk = 'code'
+    codes = db.select_distinct(dbname, pk)
+    types = ['fund', 'stock']
+    for code in codes:
+        wheres = [
+            {'k': 'code', 'v': code},
+            {'k': 'type', 'v': types[0]}
+        ]
+        count = db.select_count(dbname, wheres)
+        wheres2 = [
+            {'k': 'code', 'v': code},
+            {'k': 'type', 'v': types[1]}
+        ]
+        count_ = db.select_count(dbname, wheres2)
+        if count and count_:
+            print(code, '重复')
+            codecn = get_code_cn(code)
+            if type(codecn) == float:
+                db.delete(dbname, wheres=wheres)
+                continue
+            db.delete(dbname, wheres=wheres2)
+
+
+def bar_size(df, fromdate, todate):
+    return len(df[(df['date'] >= fromdate.strftime('%Y-%m-%d'))
+                  & (df['date'] <= todate.strftime('%Y-%m-%d'))])
+
+
+def print_transaction(strat):
+    transacions = strat.analyzers.transactions.get_analysis()
+    for x, y in transacions.items():
+        print(x, y)
+
+
+def notify_to_wx(title, text):
+    key = "SCU53613T74bdd3a5e5ff2eb57218f74f71d495965d0711a8483e7"
+    wx_url = "https://sc.ftqq.com/{0}.send?text={1}&desp={2}".format(
+        key, title, text)
+    requests.get(wx_url)
+
+
+def check_order():
+    o = models.Order()
+    df = o.get_live_order()
+    for index, row in df.iterrows():
+        tp = int(time.time())
+        sets = [
+            {'k': 'status', 'v': 1, 'flag': ','},
+            {'k': 'updatedtime', 'v': tp, 'flag': ','},
+        ]
+        wheres = [
+            {'k': 'date', 'v': row.date},
+            {'k': 'createdtime', 'v': row.createdtime},
+        ]
+        # u = remoteclient.get_user_client(row.broker)
+        u = remoteclient.get_user_client('ht')
+        ret = u.trade(extras=row.to_dict(), action=row.action)
+        if ret['code'] == 0:
+            sets.append(
+                {'k': 'entrust_no', 'v': ret['entrust_no'], 'flag': ','}
+            )
+        o.db.upsert(row, dbname=o.dbname, sets=sets, wheres=wheres)
 
 
 # %%
 if __name__ == "__main__":
-    # st = int(time.time())
-    update_daily()
-    # end = int(time.time())
-    # print((end - st) / 60)
-    # ret = check_opt_result()
-    # get_morning_star()
-
-    # %%
+    pass
+    # get_all_futures()
+    check_order()
+    import ipdb
+    ipdb.set_trace()
