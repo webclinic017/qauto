@@ -11,3 +11,5 @@ pyecharts-assets/*
 .vscode
 */__pycache__/*
 local_config.py
+*/csv/*
+*/html/*
