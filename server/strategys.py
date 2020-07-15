@@ -69,9 +69,6 @@ class BaseStrategy(bt.Strategy):
                         # 市场波动指数CMI,如果CMI < 20,执行震荡策略,如果CMI ≥ 20，执行趋势策略
                         self.__dict__[ind][code] = cinds.CMI(
                             data, period=self.p.cmiperiod)
-                    elif ind == 'ad':
-                        self.__dict__[ind][code] = bt.talib.AD(
-                            data.high, data.low, data.close, data.volume)
                     elif ind == 'bband':
                         self.__dict__[ind][code] = bt.ind.BBands(data.close)
                     elif ind == 'sma':
@@ -79,10 +76,6 @@ class BaseStrategy(bt.Strategy):
                     elif ind == 'maxvolume':
                         self.__dict__[ind][code] = bt.ind.Highest(
                             data.volume, period=5)
-                    elif ind == 'adosc':
-                        # Chaikin A/D Oscillator Chaikin震荡指标,将资金流动情况与价格行为相对比，检测市场中资金流入和流出的情况
-                        self.__dict__[ind][code] = bt.talib.ADOSC(
-                            data.high, data.low, data.close, data.volume, fastperiod=3, slowperiod=10)
                     elif ind == 'atr':
                         self.__dict__[ind][code] = cinds.ATR(
                             data=data, period=14)

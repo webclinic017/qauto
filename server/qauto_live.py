@@ -6,6 +6,7 @@ import backtrader as bt
 import strategys
 import models
 from datetime import datetime, timedelta
+import asyncio
 
 import utils
 import constant
@@ -15,9 +16,7 @@ import constant
 
 # TODO: 检查数据正确性
 
-def start_strategy(strategy, code, code_cn):
-    # 开启实盘交易
-    live = utils.true
+def start_strategy(strategy, code, code_cn, live=utils.false):
     # 开启5分钟周期下单
     multiperiod = 'k_5min_data'
 
@@ -40,7 +39,7 @@ def start_strategy(strategy, code, code_cn):
     dbnames.append(multiperiod)
     for dbname in dbnames:
         df = utils.get_database_data(
-            code, dbname=dbname, start=start)
+            code, dbname=dbname, start=start, live=live)
         # 验证数据
         # print(df)
         if df.empty:
@@ -64,7 +63,7 @@ def start_strategy(strategy, code, code_cn):
     print('Final Portfolio Value: %.3f' % cerebro.broker.getvalue())
 
 
-def run_strategy(fund):
+def run_strategy(fund, live):
     # 消费特殊处理,cmi值一直偏高
     code = fund['code']
     code_cn = fund['code_cn']
@@ -73,23 +72,51 @@ def run_strategy(fund):
         strategy = strategys.TWAPMultiStrategy
     else:
         strategy = strategys.CMIStrategy
-    start_strategy(strategy, code, code_cn)
+    start_strategy(strategy, code, code_cn, live)
 
 
-def async_run_strategy(fund, db=None, dbname=''):
+def async_run_strategy2(fund, db=None, dbname='', live=utils.false):
     code = fund['code']
     isempty = utils.update_k_5min_data(
-        code, db=db, dbname=dbname, init=utils.false)
+        code, db=db, dbname=dbname, live=live, init=utils.false)
+    if 1:
+        run_strategy(fund, live)
+
+
+async def async_run_strategy(fund, db=None, dbname='', live=utils.false):
+    code = fund['code']
+    isempty = utils.update_k_5min_data(
+        code, db=db, dbname=dbname, live=live, init=utils.false)
     if not isempty:
-        run_strategy(fund)
+        run_strategy(fund, live)
+
+
+async def async_update_live_k_data(fund, db=None, dbname='', live=utils.true):
+    code = fund['code']
+    utils.update_k_data(
+        code, db=db, dbname=dbname, live=live, init=utils.false
+    )
+
+def async_update_live_k_data2(fund, db=None, dbname='', live=utils.true):
+    code = fund['code']
+    utils.update_k_data(
+        code, db=db, dbname=dbname, live=live, init=utils.false
+    )
+
 
 
 # %%
 if __name__ == "__main__":
     funds = constant.live_trade_funds
     db = models.DB()
+    live = utils.false
     dbname = 'k_5min_data'
-    for fund in funds:
-        # async_run_strategy(fund, db, dbname)
-        run_strategy(fund)
-    # utils.async_tasks(async_run_strategy, tasks=funds, db=db, dbname=dbname)
+    # dbname = 'k_data'
+    # for fund in funds:
+        # async_update_live_k_data2(fund, db, dbname)
+        # async_run_strategy2(fund, db, dbname, live)
+        # run_strategy(fund)
+
+    utils.asyncio_tasks(async_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
+
+    # utils.async_tasks(async_run_strategy2, tasks=funds, db=db, dbname=dbname)

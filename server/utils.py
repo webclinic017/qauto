@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 import time
 import os
 
+import asyncio
+
 from pprint import pprint
 import pyecharts.options as opts
 from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
@@ -16,13 +18,13 @@ from pyecharts.charts import Kline, Bar, Line, EffectScatter, Grid, Scatter
 import talib as ta
 import pandas as pd
 import tushare as ts
-import akshare as ak
+# import akshare as ak
 import backtrader as bt
 from bs4 import BeautifulSoup as bs
 import requests
-import gevent
-from gevent.pool import Pool
-import gevent.monkey
+# import gevent
+# from gevent.pool import Pool
+# import gevent.monkey
 from sklearn import svm
 import numpy as np
 from analyzers import AccountValue
@@ -47,7 +49,7 @@ for fdir in dirs:
 
 global_config = {}
 
-gevent.monkey.patch_all(select=false)
+# gevent.monkey.patch_all(select=false)
 
 # %%
 # https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
@@ -110,7 +112,7 @@ def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund'):
         else:
             return pd.DataFrame()
     now = datetime.now()
-    if len(df) > 0 and is_trade_day() and now.hour < 17:
+    if len(df) > 0 and is_trade_day() and now.hour < 17 and freq == 'D':
         df.drop(df.index[0], inplace=true)
     # print(df)
     df['datetime'] = df.index
@@ -121,8 +123,8 @@ def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund'):
     return df
 
 
-def get_database_data(code, start='', end='', dbname='k_data'):
-    db = models.DB()
+def get_database_data(code, start='', end='', dbname='k_data', live=false):
+    db = models.KDATA()
     wheres = [
         {'k': 'code', 'v': code, 'op': '='},
     ]
@@ -136,7 +138,7 @@ def get_database_data(code, start='', end='', dbname='k_data'):
         where = {'k': 'datetime', 'v': end, 'op': '<='}
         wheres.append(where)
     orderby = 'timestamp asc'
-    df = db.select(dbname, wheres=wheres, orderby=orderby)
+    df = db.select_data(dbname, wheres=wheres, orderby=orderby, live=live)
     if df.empty:
         return pd.DataFrame()
     df.index = df['datetime']
@@ -595,17 +597,83 @@ def get_code_string(code):
     return code
 
 
-def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type='fund', init=false):
+def get_query_str(querys):
+    querystr = ''
+    if isinstance(querys, dict):
+        for k, v in querys.items():
+            if not v:
+                continue
+            op = '=='
+            querystr = _get_query_str(querystr, k, v, op)
+    elif isinstance(querys, list):
+        for x in querys:
+            querystr = _get_query_str(querystr, x['k'], x['v'], x['op'])
+
+    return querystr
+
+
+def _get_query_str(querystr, k, v, op):
+    if k == 'datetime':
+        datearr = [int(x) for x in v.split('-')]
+        dt = datetime(datearr[0], datearr[1], datearr[2])
+        k = 'timestamp'
+        v = int(dt.timestamp())
+
+    if op == '=':
+        op = '=='
+
+    if querystr == '':
+        querystr += '{}{}{}'.format(k, op, v)
+    else:
+        querystr += ' and {}{}{}'.format(k, op, v)
+    return querystr
+
+
+def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type='fund', live=false, init=false):
     print('start...{0},date...{1}'.format(code, start))
     code = get_code_string(code)
     df = get_ts_data(code, start=start, end=end, _type=_type, freq=freq)
     if df.empty:
         print('{0},未获得数据'.format(code))
-        return pd.DataFrame()
+        return true
     # 时区设置不一致
     df['timestamp'] = df['datetime'].apply(
         lambda x: int(x.timestamp()) - 8*60*60,
     )
+    if live:
+        fn = 'csv/{}_{}.csv'.format(code, dbname)
+        if init:
+            df.code = df.code.apply(lambda x: str(x))
+            pandas_save(df, fn)
+            return false
+
+        isempty = true
+        if not os.path.exists(fn):
+            update_one_code(code, start='', db=db, dbname=dbname,
+                            _type=_type, freq=freq, live=live, init=true)
+            isempty = false
+        else:
+            da = pd.read_csv(fn)
+            df.reset_index(drop=true, inplace=true)
+            df.sort_values(by='datetime', ascending=false, inplace=true)
+
+            for _, row in df.iterrows():
+                querys = dict(
+                    code=row.code,
+                    timestamp=row.timestamp,
+                )
+                querystr = get_query_str(querys)
+                dtmp = da.query(querystr)
+                if len(dtmp) <= 0:
+                    # print(row.to_dict())
+                    da = da.append(row, ignore_index=True)
+                    isempty = false
+                else:
+                    break
+            if not isempty:
+                pandas_save(da, fn)
+        return isempty
+
     wheres = [{'k': 'code', 'v': code}]
     if init:
         print('初始化 {} {}'.format(code, dbname))
@@ -619,18 +687,24 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
     return isempty
 
 
-def update_k_5min_data(code, start='', db=None, dbname='k_5min_data', init=false):
+def pandas_save(df, fn):
+    df.reset_index(drop=true, inplace=true)
+    df.to_csv(fn, index=False)
+    print('save ', fn)
+
+
+def update_k_5min_data(code, start='', db=None, dbname='k_5min_data', live=false, init=false):
     if not init:
-        start = get_datetime_date(flag='-')
+        start = get_datetime_date(days=-7, flag='-')
     else:
         start = ''
     freq = '5min'
     isempty = update_one_code(code, start=start, db=db,
-                              dbname=dbname, freq=freq, init=init)
+                              dbname=dbname, freq=freq, live=live, init=init)
     return isempty
 
 
-def update_k_data(code, start='', db=None, dbname='k_data', init=false):
+def update_k_data(code, start='', db=None, dbname='k_data', live=false, init=false):
     if not init:
         start = get_datetime_date(
             datetime.now() + timedelta(days=-3), flag='-')
@@ -638,7 +712,7 @@ def update_k_data(code, start='', db=None, dbname='k_data', init=false):
         start = ''
     freq = 'D'
     update_one_code(code, start=start, db=db,
-                    dbname=dbname, freq=freq, init=init)
+                    dbname=dbname, freq=freq, live=live, init=init)
 
 
 def update_future():
@@ -761,7 +835,7 @@ def is_trade_day(day=None):
 # %%
 
 
-def async_tasks(func, tasks, *args, **kw):
+def asyncgreelet_tasks(func, tasks, *args, **kw):
     pool = Pool(size=16)
     greenlets = []
     for task in tasks:
@@ -769,6 +843,16 @@ def async_tasks(func, tasks, *args, **kw):
             pool.spawn(func, task, *args, **kw)
         )
     gevent.joinall(greenlets)
+
+
+def asyncio_tasks(func, tasks, *args, **kw):
+    new_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(new_loop)
+    # loop = asyncio.get_event_loop()
+    coroutines = [func(task, *args, **kw) for task in tasks]
+    wait_coroutines = asyncio.wait(coroutines)
+    new_loop.run_until_complete(wait_coroutines)
+    new_loop.close()
 
 
 def get_morning_star(first=true, data={}):

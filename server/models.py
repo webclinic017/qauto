@@ -27,12 +27,12 @@ class DB(object):
     def __init__(self):
         self.max_overflow = 100
         self.engine = create_engine(
-            # 'postgresql+psycopg2://postgres:123456@localhost:5432/postgres',
-            'postgresql+psycopg2://postgres:123456@192.168.1.9:5432/postgres',
+            'postgresql+psycopg2://postgres:123456@localhost:5432/postgres',
+            # 'postgresql+psycopg2://postgres:123456@192.168.1.9:5432/postgres',
             pool_reset_on_return='commit',
             max_overflow=self.max_overflow,  # 不限制连接数
             pool_size=16,
-            echo=True,
+            # echo=True,
             # echo_pool=True,
         )
 
@@ -216,6 +216,26 @@ class DB(object):
             time.sleep(0.75)
             checkedout = self.engine.pool.checkedout()
 
+class KDATA(DB):
+    def select_data(self, dbname, fields=[], wheres=None, orderby=None, live=False):
+        if live:
+            code = wheres[0]['v']
+            fn = 'csv/{}_{}.csv'.format(code, dbname)
+            print('文件加载...', fn)
+            da = pd.read_csv(fn)
+            querystr = utils.get_query_str(wheres)
+            df = da.query(querystr)
+            if orderby:
+                orderby = orderby.split()[0]
+                df.sort_values(by=orderby, ascending=utils.true, inplace=utils.true)
+
+            df.datetime = df.datetime.astype('datetime64')
+            return df
+        else:
+            print('数据库加载...', dbname)
+            df = self.select(dbname, wheres=wheres, orderby=orderby)
+        return df
+
 
 class Order:
     def __init__(self):
@@ -295,9 +315,12 @@ class PandasData(PD):
 
 # %%
 if __name__ == "__main__":
-    # db = DB()
+    db = DB()
     # code = '159928'
-    dbname = 'live_order'
+    dbname = 'ggt'
+    indexes = ['code', 'name']
+    db.set_index(dbname, indexes)
+
         # print(index, row)
 
 

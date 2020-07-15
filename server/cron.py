@@ -1,6 +1,7 @@
 from datetime import datetime
 # from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from pytz import utc
@@ -11,28 +12,30 @@ import utils
 import models
 import qauto_live
 
+# https://www.cnblogs.com/shhnwangjian/p/7877985.html
+
 # 配置执行器，并设置线程数
 executors = {
     'default': ThreadPoolExecutor(20),
     'processpool': ProcessPoolExecutor(5)
 }
 job_defaults = {
-    'coalesce': False,     # 默认情况下关闭新的作业
-    'max_instances': 3     # 设置调度程序将同时运行的特定作业的最大实例数3
+    'coalesce': utils.true,     # 默认情况下开启新的作业
+    'misfire_grace_time': 60,   # 60秒限制
+    'max_instances': 3,         # 设置调度程序将同时运行的特定作业的最大实例数3
 }
 
 scheduler = BlockingScheduler(
     executors=executors,
     job_defaults=job_defaults,
     timezone=utc,
-    # misfire_grace_time=600,
 )
 
 
-@scheduler.scheduled_job('interval', minutes=2)
 def update_k_5min_data_cron():
     # 交易日检查
     now = datetime.now()
+    print(now)
     istradeday = utils.is_trade_day(now)
     if not istradeday:
         print('非交易日')
@@ -49,7 +52,7 @@ def update_k_5min_data_cron():
         funds = constant.live_trade_funds
         db = models.DB()
         dbname = 'k_5min_data'
-        utils.async_tasks(
+        utils.asyncio_tasks(
             qauto_live.async_run_strategy,
             tasks=funds,
             db=db,
@@ -59,9 +62,9 @@ def update_k_5min_data_cron():
         print('非交易时间')
 
 
-@scheduler.scheduled_job('cron', hour='21')
 def update_k_data_cron():
     now = datetime.now()
+    print(now)
     istradeday = utils.is_trade_day(now)
     if not istradeday:
         print('非交易日')
@@ -69,13 +72,15 @@ def update_k_data_cron():
     funds = constant.live_trade_funds
     db = models.DB()
     dbname = 'k_data'
-    codes = [x['code'] for x in funds]
-    utils.async_tasks(
-        utils.update_k_data,
-        tasks=codes,
+    live = utils.true
+    utils.asyncio_tasks(
+        qauto_live.async_update_live_k_data,
+        tasks=funds,
         db=db,
         dbname=dbname,
+        live=live,
     )
+
 
 @scheduler.scheduled_job('cron', hour='22')
 def update_index_daily_cron():
@@ -86,16 +91,27 @@ def update_index_daily_cron():
     utils.update_index_daily()
 
 
-# scheduler.add_job(update_k_5min_data_cron, 'interval', minutes=1)
-# 更新分钟数据,策略下单使用
-scheduler.add_job(update_k_5min_data_cron,
-                  max_instances=1, misfire_grace_time=300)
-# 更新指数数据,PE,PB
-# scheduler.add_job(update_index_daily_cron)
-# 更新每日k线数据
-# scheduler.add_job(update_k_data_cron, id='update_k_data_id')
-# scheduler.remove_job('update_k_data_id')
+def main():
+    # 更新分钟数据,策略下单使用
+    trigger = CronTrigger(
+        hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='1')
+    scheduler.add_job(update_k_5min_data_cron,
+                      trigger=trigger, max_instances=1)
 
-print('start...')
-scheduler.start()
-print('end...')
+    trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=22)
+    # trigger = CronTrigger(trigger)
+    scheduler.add_job(update_k_data_cron, trigger=trigger)
+    scheduler.start()
+
+    # 更新指数数据,PE,PB
+    # scheduler.add_job(update_index_daily_cron)
+    # 更新每日k线数据
+    # scheduler.add_job(update_k_data_cron, id='update_k_data_id')
+    # scheduler.remove_job('update_k_data_id')
+
+
+if __name__ == "__main__":
+    print('start...')
+    # main()
+    update_k_data_cron()
+    print('end...')

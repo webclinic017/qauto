@@ -57,14 +57,9 @@ def get_one_params_ex(db, dbname, code, dates, strategy, optparams):
 def valid_best_param(df, bestparams):
     df.sort_values(by='score', inplace=True, ascending=True)
     df.reset_index(drop=True, inplace=True)
-    querystr = ''
-    for k, v in bestparams.items():
-        if not v:
-            continue
-        if querystr == '':
-            querystr += '{}=={}'.format(k, v)
-        else:
-            querystr += ' and {}=={}'.format(k, v)
+
+    querystr = utils.get_query_str(bestparams)
+
     da = df.query(querystr)
     pos = da.index[-1]
     isbest = False

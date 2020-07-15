@@ -138,15 +138,15 @@ def get_user_client(broker):
 if __name__ == '__main__':
     broker = 'hb'
     u = get_user_client(broker)
-    # ret = u.auto_ipo
-    # print(ret)
-    extras = dict(
-        code='159928',
-        code_cn='消费ETF',
-        price=4.012,
-        size=100,
-        money=1000,
-    )
+    ret = u.auto_ipo
+    print(ret)
+    # extras = dict(
+    #     code='159928',
+    #     code_cn='消费ETF',
+    #     price=4.012,
+    #     size=100,
+    #     money=1000,
+    # )
     # # ret = u.trade(extras=extras, action='buy')
-    ret = u.trade(extras=extras, action='checkrt')
+    # ret = u.trade(extras=extras, action='checkrt')
     # print(ret)
