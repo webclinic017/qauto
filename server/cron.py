@@ -1,5 +1,6 @@
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# from apscheduler.schedulers.background import BackgroundScheduler
 # from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -20,7 +21,7 @@ job_defaults = {
     'max_instances': 3,         # 设置调度程序将同时运行的特定作业的最大实例数3
 }
 
-scheduler = BackgroundScheduler(
+scheduler = AsyncIOScheduler(
     job_defaults=job_defaults,
     timezone=utc,
 )
@@ -106,6 +107,6 @@ def start():
 
 if __name__ == "__main__":
     print('start...')
-    main()
+    start()
     # update_k_data_cron()
     print('end...')
