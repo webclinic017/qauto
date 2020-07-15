@@ -49,8 +49,6 @@ def routing():
     cmd = '{}{} -d {} {}'.format(su_prefix, am_prefix, path, extra_str)
     if not os.path.exists(task_file):
         touch(task_file)
-    if not os.path.exists(log_file):
-        touch(log_file)
     print(cmd)
     raw_stat = get_stat(task_file)
 
@@ -112,9 +110,9 @@ def unlock():
         cmd += '-d {}'.format(item['d'])
 
     now = datetime.now()
-    log_file = '{}.log'.format(now)
-    if not os.path.exists(task_file):
-        touch(task_file)
+    log_file = '{}/{}.log'.format(log_prefix, now.strftime('%Y-%m-%d'))
+    if not os.path.exists(log_file):
+        touch(log_file)
 
     status, _ = subprocess.getstatusoutput(cmd)
     data = dict(msg='success', code=0)
