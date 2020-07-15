@@ -96,8 +96,10 @@ class BaseStrategy(bt.Strategy):
                         # TSI可帮助判断市场趋势,TSI 线上扬表示上升趋势。反之，TSI 线下挫表示下跌趋势
                         self.__dict__[ind][code] = cinds.TSI()
                     elif ind == 'mtm':
-                        self.__dict__[ind][code] = bt.talib.MOM(
-                            data, timeperiod=self.p.mtmperiod)
+                        # self.__dict__[ind][code] = bt.talib.MOM(
+                        #     data, timeperiod=self.p.mtmperiod)
+                        self.__dict__[ind][code] = cinds.MTM(
+                            data, period=self.p.mtmperiod)
                     elif ind == 'mamtm':
                         self.__dict__[ind][code] = bt.ind.SMA(
                             self.__dict__['mtm'][code], period=self.p.mamtmperiod)

@@ -112,11 +112,11 @@ if __name__ == "__main__":
     live = utils.true
     dbname = 'k_5min_data'
     # dbname = 'k_data'
-    # for fund in funds:
+    for fund in funds:
         # async_update_live_k_data2(fund, db, dbname)
-        # async_run_strategy2(fund, db, dbname, live)
+        async_run_strategy2(fund, db, dbname, live)
         # run_strategy(fund)
 
-    utils.asyncio_tasks(async_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
+    # utils.asyncio_tasks(async_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
 
     # utils.async_tasks(async_run_strategy2, tasks=funds, db=db, dbname=dbname)

@@ -206,7 +206,7 @@ flow.recordTasks = function (extras) {
     extras.id = engine.id;
     file = "/data/data/com.termux/files/home/qauto/server/log/tasks.txt";
     line = JSON.stringify(extras);
-    ret = common.appendToFile(line, file);
+    ret = common.appendToFile(false, line, file);
     common.toastLog(ret);
 };
 

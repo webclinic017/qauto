@@ -164,6 +164,19 @@ class MOM(bt.Indicator):
         super(MOM, self).__init__()
 
 
+class MTM(bt.Indicator):
+    lines = ('mtm',)
+    params = dict(
+        period=13,
+    )
+
+    def __init__(self, data=None):
+        if not isinstance(data, models.PandasData):
+            data = self.data
+        self.l.mtm = data - data(-self.p.period)
+        super(MTM, self).__init__()
+
+
 class TSI(bt.Indicator):
     alias = ('TSI',)
     params = (
