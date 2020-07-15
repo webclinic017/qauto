@@ -15,7 +15,7 @@ import pyecharts.options as opts
 from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
 from pyecharts import options as opts
 from pyecharts.charts import Kline, Bar, Line, EffectScatter, Grid, Scatter
-import talib as ta
+# import talib as ta
 import pandas as pd
 import tushare as ts
 # import akshare as ak

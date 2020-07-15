@@ -75,7 +75,7 @@ def run_strategy(fund, live):
     start_strategy(strategy, code, code_cn, live)
 
 
-def async_run_strategy2(fund, db=None, dbname='', live=utils.false):
+def async_run_strategy2(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
@@ -83,7 +83,7 @@ def async_run_strategy2(fund, db=None, dbname='', live=utils.false):
         run_strategy(fund, live)
 
 
-async def async_run_strategy(fund, db=None, dbname='', live=utils.false):
+async def async_run_strategy(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
@@ -109,7 +109,7 @@ def async_update_live_k_data2(fund, db=None, dbname='', live=utils.true):
 if __name__ == "__main__":
     funds = constant.live_trade_funds
     db = models.DB()
-    live = utils.false
+    live = utils.true
     dbname = 'k_5min_data'
     # dbname = 'k_data'
     # for fund in funds:

@@ -12,7 +12,7 @@ from pprint import pprint
 
 
 import indicators as cinds
-import talib
+# import talib
 
 import models
 import constant

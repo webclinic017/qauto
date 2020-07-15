@@ -51,7 +51,6 @@ def routing():
 
     status, _ = subprocess.getstatusoutput(cmd)
     key = item['key']
-    print(key)
     is_finished, extra = is_task_finished(key, raw_stat)
     data = dict(msg='success', code=0)
     if is_finished and status == 0:
@@ -182,7 +181,7 @@ def get_volume():
 
 
 if __name__ == '__main__':
-    # import cron
-    # cron.scheduler.start()
+    import cron
+    cron.start()
     print('cron start...')
-    app.run(host='0.0.0.0', port=9000, debug=True)
+    app.run(host='0.0.0.0', port=9000, debug=False)

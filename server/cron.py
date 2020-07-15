@@ -1,9 +1,8 @@
 from datetime import datetime
-# from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from pytz import utc
 
 import constant
@@ -15,18 +14,13 @@ import qauto_live
 # https://www.cnblogs.com/shhnwangjian/p/7877985.html
 
 # 配置执行器，并设置线程数
-executors = {
-    'default': ThreadPoolExecutor(20),
-    'processpool': ProcessPoolExecutor(5)
-}
 job_defaults = {
     'coalesce': utils.true,     # 默认情况下开启新的作业
     'misfire_grace_time': 60,   # 60秒限制
     'max_instances': 3,         # 设置调度程序将同时运行的特定作业的最大实例数3
 }
 
-scheduler = BlockingScheduler(
-    executors=executors,
+scheduler = BackgroundScheduler(
     job_defaults=job_defaults,
     timezone=utc,
 )
@@ -91,7 +85,7 @@ def update_index_daily_cron():
     utils.update_index_daily()
 
 
-def main():
+def start():
     # 更新分钟数据,策略下单使用
     trigger = CronTrigger(
         hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='1')
@@ -112,6 +106,6 @@ def main():
 
 if __name__ == "__main__":
     print('start...')
-    # main()
-    update_k_data_cron()
+    main()
+    # update_k_data_cron()
     print('end...')
