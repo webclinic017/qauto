@@ -33,7 +33,8 @@ ave_volumes = {}
 su_prefix = 'su -c '
 am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivity '
 
-task_file = '/data/data/com.termux/files/home/qauto/server/log/tasks.txt'
+log_prefix = '/data/data/com.termux/files/home/qauto/server/log/'
+task_file = '{0}/tasks.txt'.format(log_prefix)
 
 
 @app.route('/routing', methods=['POST'])
@@ -46,6 +47,14 @@ def routing():
     path = '/sdcard/JSBOX/main.js'
     extra_str = get_extras_str(item)
     cmd = '{}{} -d {} {}'.format(su_prefix, am_prefix, path, extra_str)
+    if not os.path.exists(task_file):
+        touch(task_file)
+    now = datetime.now()
+    log_file = '{}.log'.format(now)
+    if not os.path.exists(task_file):
+        touch(task_file)
+    if not os.path.exists(log_file):
+        touch(log_file)
     print(cmd)
     raw_stat = get_stat(task_file)
 
@@ -61,6 +70,11 @@ def routing():
         data['msg'] = 'error'
         data['code'] = 1
         return jsonify(data)
+
+
+def touch(fn):
+    file = open(fn, 'w')
+    file.close()
 
 
 def is_task_finished(key, raw_stat):
