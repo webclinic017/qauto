@@ -63,7 +63,7 @@ flow.launch = function (fun) {
     }
     var msg = "打开{0}".format(init_param.app_name);
     common.toastLog(msg);
-    common.launch(init_param.app_name);
+    common.launchApp(init_param.app_name);
     common.sleep(random(1, 3));
 
     flow.closeTips(fun);

@@ -24,5 +24,8 @@ const { boundsRandomClick } = require("./common");
 // storage_app.clear();
 
 
-extras = common.engineArgsGet();
-common.toastLog(extras)
+// extras = common.engineArgsGet();
+// common.toastLog(extras)
+common.checkAutoService()
+    var engine = engines.myEngine();
+    common.toastLog(engine)

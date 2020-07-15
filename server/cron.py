@@ -1,7 +1,5 @@
 from datetime import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-# from apscheduler.schedulers.background import BackgroundScheduler
-# from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from pytz import utc
@@ -21,7 +19,7 @@ job_defaults = {
     'max_instances': 3,         # 设置调度程序将同时运行的特定作业的最大实例数3
 }
 
-scheduler = AsyncIOScheduler(
+scheduler = BackgroundScheduler(
     job_defaults=job_defaults,
     timezone=utc,
 )
@@ -77,7 +75,6 @@ def update_k_data_cron():
     )
 
 
-@scheduler.scheduled_job('cron', hour='22')
 def update_index_daily_cron():
     istradeday = utils.is_trade_day()
     if not istradeday:
@@ -89,14 +86,15 @@ def update_index_daily_cron():
 def start():
     # 更新分钟数据,策略下单使用
     trigger = CronTrigger(
-        hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='1')
+        hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
     scheduler.add_job(update_k_5min_data_cron,
                       trigger=trigger, max_instances=1)
 
-    trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=22)
+    trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=21, minute=10)
     # trigger = CronTrigger(trigger)
     scheduler.add_job(update_k_data_cron, trigger=trigger)
     scheduler.start()
+    scheduler.print_jobs()
 
     # 更新指数数据,PE,PB
     # scheduler.add_job(update_index_daily_cron)
