@@ -36,6 +36,10 @@ am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivi
 log_prefix = '/data/data/com.termux/files/home/qauto/server/log/'
 task_file = '{0}/tasks.txt'.format(log_prefix)
 
+@app.route('/ping')
+def ping():
+    data = {'code': 0, 'pong': True}
+    return jsonify(data)
 
 @app.route('/routing', methods=['POST'])
 @login_required
