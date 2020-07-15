@@ -204,7 +204,7 @@ flow.closeTips = function (fun) {
 flow.recordTasks = function (extras) {
     var engine = engines.myEngine();
     extras.id = engine.id;
-    file = "/data/data/com.termux/files/home/web/tasks.txt";
+    file = "/data/data/com.termux/files/home/qauto/server/log/tasks.txt";
     line = JSON.stringify(extras);
     ret = common.appendToFile(line, file);
     common.toastLog(ret);

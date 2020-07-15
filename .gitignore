@@ -13,3 +13,4 @@ pyecharts-assets/*
 local_config.py
 */csv/*
 */html/*
+*/log/*

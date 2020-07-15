@@ -33,7 +33,7 @@ ave_volumes = {}
 su_prefix = 'su -c '
 am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivity '
 
-task_file = '/data/data/com.termux/files/home/web/tasks.txt'
+task_file = '/data/data/com.termux/files/home/qauto/server/log/tasks.txt'
 
 
 @app.route('/routing', methods=['POST'])
