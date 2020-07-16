@@ -40,6 +40,10 @@ CurrentConfig.ONLINE_HOST = OnlineHostType.NOTEBOOK_HOST
 true = True
 false = False
 
+basedir = '/data/data/com.termux/files/home/qauto/server'
+if sys.platform == 'linux':
+    os.chdir(basedir)
+
 htmlpath = 'html'
 csvpath = 'csv'
 dirs = [htmlpath, csvpath]

@@ -136,10 +136,10 @@ def get_user_client(broker):
 
 
 if __name__ == '__main__':
-    broker = 'hb'
+    broker = 'hte'
     u = get_user_client(broker)
-    ret = u.auto_ipo
-    print(ret)
+    # ret = u.auto_ipo
+    # print(ret)
     # extras = dict(
     #     code='159928',
     #     code_cn='消费ETF',

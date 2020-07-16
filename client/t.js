@@ -1,5 +1,4 @@
 var common = require("./common");
-const { boundsRandomClick } = require("./common");
 // common.common.toastLog(engines.myEngine());
 
 // var args = common.engineArgsGet();
@@ -26,6 +25,4 @@ const { boundsRandomClick } = require("./common");
 
 // extras = common.engineArgsGet();
 // common.toastLog(extras)
-common.checkAutoService()
-    var engine = engines.myEngine();
-    common.toastLog(engine)
+common.netStatus()

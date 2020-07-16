@@ -35,8 +35,8 @@ ave_volumes = {}
 su_prefix = 'su -c '
 am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivity '
 
-log_prefix = '/data/data/com.termux/files/home/qauto/server/log/'
-task_file = '{0}/tasks.txt'.format(log_prefix)
+log_prefix = '{}/log/'.format(utils.basedir)
+task_file = '{}/tasks.txt'.format(log_prefix)
 
 
 @app.route('/ping')

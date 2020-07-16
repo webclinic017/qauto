@@ -17,7 +17,12 @@ tornado.options.parse_command_line()
 port = 9000
 http_server = HTTPServer(WSGIContainer(app))
 http_server.listen(port)
-http_server.start(2)
+num = 1
+
+if sys.platform == 'linux':
+    num = 2
+
+http_server.start(num)
 
 cron.start()
 IOLoop.instance().start()
