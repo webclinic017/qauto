@@ -7,7 +7,7 @@ env.hosts = ['192.168.1.9:8022']
 
 def commit():
     import ipdb; ipdb.set_trace()
-    local("git add --all && git commit -m 'u'")
+    ret = local("git add --all && git commit -m 'u'")
 
 
 def push():
