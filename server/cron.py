@@ -29,18 +29,22 @@ scheduler = TornadoScheduler(
 
 def auto_ipo():
     broker = 'hb'
-    u = remoteclient.get_user_client(broker)
-    ret = u.auto_ipo
+    uc = remoteclient.get_user_client(broker)
+    ret = uc.prepare
+    print(ret)
+    ret = uc.auto_ipo
     print(ret)
 
 
 def check_rt():
     broker = 'hb'
-    u = remoteclient.get_user_client(broker)
+    uc = remoteclient.get_user_client(broker)
+    ret = uc.prepare
+    print(ret)
     extras = dict(
         money=1000,
     )
-    ret = u.trade(extras=extras, action='checkrt')
+    ret = uc.trade(extras=extras, action='checkrt')
     print(ret)
 
 
@@ -54,8 +58,8 @@ def update_k_5min_data_cron():
     now = datetime.now()
     print(now)
     broker = 'hb'
-    u = remoteclient.get_user_client(broker)
-    print(u)
+    uc = remoteclient.get_user_client(broker)
+    print(uc)
     istradeday = utils.is_trade_day(now)
     if not istradeday:
         print('非交易日')

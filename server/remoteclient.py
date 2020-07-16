@@ -127,18 +127,16 @@ def get_user_client(broker):
     # host = '172.20.10.14'
     host = '192.168.1.9'
     port = 9000
-    u = use(broker, host, port)
-    ret = u.unlock
-    # print(ret)
-    # ret = u.prepare
+    uc = use(broker, host, port)
+    ret = uc.unlock
     print(ret)
-    return u
+    return uc
 
 
 if __name__ == '__main__':
     broker = 'hte'
-    u = get_user_client(broker)
-    # ret = u.auto_ipo
+    uc = get_user_client(broker)
+    # ret = uc.auto_ipo
     # print(ret)
     # extras = dict(
     #     code='159928',
@@ -147,6 +145,6 @@ if __name__ == '__main__':
     #     size=100,
     #     money=1000,
     # )
-    # # ret = u.trade(extras=extras, action='buy')
-    # ret = u.trade(extras=extras, action='checkrt')
+    # # ret = uc.trade(extras=extras, action='buy')
+    # ret = uc.trade(extras=extras, action='checkrt')
     # print(ret)
