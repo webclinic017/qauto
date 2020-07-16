@@ -216,18 +216,20 @@ class DB(object):
             time.sleep(0.75)
             checkedout = self.engine.pool.checkedout()
 
+
 class KDATA(DB):
     def select_data(self, dbname, fields=[], wheres=None, orderby=None, live=False):
         if live:
             code = wheres[0]['v']
-            fn = 'csv/{}_{}.csv'.format(code, dbname)
-            print('文件加载...', fn)
-            da = pd.read_csv(fn)
+            file = utils.get_csv_file(code, dbname)
+            print('文件加载...', file)
+            da = pd.read_csv(file)
             querystr = utils.get_query_str(wheres)
             df = da.query(querystr)
             if orderby:
                 orderby = orderby.split()[0]
-                df.sort_values(by=orderby, ascending=utils.true, inplace=utils.true)
+                df.sort_values(by=orderby, ascending=utils.true,
+                               inplace=utils.true)
 
             df.datetime = df.datetime.astype('datetime64')
             return df
@@ -321,7 +323,7 @@ if __name__ == "__main__":
     indexes = ['code', 'name']
     db.set_index(dbname, indexes)
 
-        # print(index, row)
+    # print(index, row)
 
 
 # %%

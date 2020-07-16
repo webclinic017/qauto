@@ -709,6 +709,8 @@ flow.run({
     },
     apply: function (fun, data) {
         var msg = "{0},申购 {1} 元".format(data.code, data.money);
+        var title = "基金申购提示";
+        flow.common.notifyToWX(title, text);
         flow.common.toastLog(msg);
         var has_apply = false;
         var item = fun.getItem();

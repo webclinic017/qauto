@@ -79,6 +79,15 @@ def async_run_strategy2(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
+    if live:
+        # 检查k_data是否已更新
+        _dbname = 'k_data'
+        file = utils.get_csv_file(code, _dbname)
+        stat = utils.get_stat(file)
+        if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+            utils.update_k_data(
+                code, db=db, dbname=_dbname, live=live, init=utils.false
+            )
     if 1:
         run_strategy(fund, live)
 
@@ -87,6 +96,15 @@ async def async_run_strategy(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
+    if live:
+        # 检查k_data是否已更新
+        _dbname = 'k_data'
+        file = utils.get_csv_file(code, _dbname)
+        stat = utils.get_stat(file)
+        if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+            utils.update_k_data(
+                code, db=db, dbname=_dbname, live=live, init=utils.false
+            )
     if not isempty:
         run_strategy(fund, live)
 
@@ -97,12 +115,12 @@ async def async_update_live_k_data(fund, db=None, dbname='', live=utils.true):
         code, db=db, dbname=dbname, live=live, init=utils.false
     )
 
+
 def async_update_live_k_data2(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     utils.update_k_data(
         code, db=db, dbname=dbname, live=live, init=utils.false
     )
-
 
 
 # %%

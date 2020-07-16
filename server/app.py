@@ -9,6 +9,8 @@ from flask import Flask, jsonify, request
 import subprocess
 import functools
 
+import utils
+
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False  # 支持中文
 
@@ -36,10 +38,12 @@ am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivi
 log_prefix = '/data/data/com.termux/files/home/qauto/server/log/'
 task_file = '{0}/tasks.txt'.format(log_prefix)
 
+
 @app.route('/ping')
 def ping():
     data = {'code': 0, 'pong': True}
     return jsonify(data)
+
 
 @app.route('/routing', methods=['POST'])
 @login_required
@@ -54,7 +58,7 @@ def routing():
     if not os.path.exists(task_file):
         touch(task_file)
     print(cmd)
-    raw_stat = get_stat(task_file)
+    raw_stat = utils.get_stat(task_file)
 
     status, _ = subprocess.getstatusoutput(cmd)
     key = item['key']
@@ -89,13 +93,8 @@ def is_task_finished(key, raw_stat):
                 return True, data
         seconds += 3
         time.sleep(3)
-        stat = get_stat(task_file)
+        stat = utils.get_stat(task_file)
     return False, {}
-
-
-def get_stat(file):
-    stat = os.stat(task_file)
-    return stat
 
 
 def get_extras_str(item):
@@ -112,11 +111,6 @@ def unlock():
     cmd = '{}{}'.format(su_prefix, am_prefix)
     if item.get('d', ''):
         cmd += '-d {}'.format(item['d'])
-
-    now = datetime.now()
-    log_file = '{}/{}.log'.format(log_prefix, now.strftime('%Y-%m-%d'))
-    if not os.path.exists(log_file):
-        touch(log_file)
 
     status, _ = subprocess.getstatusoutput(cmd)
     data = dict(msg='success', code=0)

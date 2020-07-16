@@ -220,7 +220,8 @@ class BaseStrategy(bt.Strategy):
         )
         df = pd.DataFrame([data])
         o = models.Order()
-        o.upsert_order(df)
+        if not self.p._live:
+            o.upsert_order(df)
         if dtcp.days == 0 and dtcp.seconds < 24 * 60 * 60:
             utils.notify_to_wx(title, text)
 

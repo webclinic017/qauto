@@ -1,5 +1,6 @@
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.tornado import TornadoScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from pytz import utc
@@ -8,6 +9,7 @@ import constant
 
 import utils
 import models
+import remoteclient
 import qauto_live
 
 # https://www.cnblogs.com/shhnwangjian/p/7877985.html
@@ -19,10 +21,32 @@ job_defaults = {
     'max_instances': 3,         # 设置调度程序将同时运行的特定作业的最大实例数3
 }
 
-scheduler = BackgroundScheduler(
+scheduler = TornadoScheduler(
     job_defaults=job_defaults,
     timezone=utc,
 )
+
+
+def auto_ipo():
+    broker = 'hb'
+    u = remoteclient.get_user_client(broker)
+    ret = u.auto_ipo
+    print(ret)
+
+
+def check_rt():
+    broker = 'hb'
+    u = remoteclient.get_user_client(broker)
+    extras = dict(
+        money=1000,
+    )
+    ret = u.trade(extras=extras, action='checkrt')
+    print(ret)
+
+
+def cron_test():
+    now = datetime.now()
+    print(now)
 
 
 def update_k_5min_data_cron():
@@ -85,6 +109,15 @@ def update_index_daily_cron():
 
 def start():
     # 更新分钟数据,策略下单使用
+    # trigger = CronTrigger(second='*/1')
+    # scheduler.add_job(cron_test, trigger=trigger)
+
+    # 自动打新,检查溢价
+    trigger = CronTrigger(hour=14, minute=45)
+    scheduler.add_job(check_rt, trigger=trigger)
+    trigger = CronTrigger(hour=9, minute=25)
+    scheduler.add_job(auto_ipo, trigger=trigger)
+
     trigger = CronTrigger(
         hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
     scheduler.add_job(update_k_5min_data_cron,

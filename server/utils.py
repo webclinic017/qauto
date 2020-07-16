@@ -630,7 +630,7 @@ def _get_query_str(querystr, k, v, op):
 
 
 def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type='fund', live=false, init=false):
-    print('start...{0},date...{1}'.format(code, start))
+    print('start...{}, dbname...{}, date...{}'.format(code, dbname, start))
     code = get_code_string(code)
     df = get_ts_data(code, start=start, end=end, _type=_type, freq=freq)
     if df.empty:
@@ -641,19 +641,19 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
         lambda x: int(x.timestamp()) - 8*60*60,
     )
     if live:
-        fn = 'csv/{}_{}.csv'.format(code, dbname)
+        file = get_csv_file(code, dbname)
         if init:
             df.code = df.code.apply(lambda x: str(x))
-            pandas_save(df, fn)
+            pandas_save(df, file)
             return false
 
         isempty = true
-        if not os.path.exists(fn):
+        if not os.path.exists(file):
             update_one_code(code, start='', db=db, dbname=dbname,
                             _type=_type, freq=freq, live=live, init=true)
             isempty = false
         else:
-            da = pd.read_csv(fn)
+            da = pd.read_csv(file)
             df.reset_index(drop=true, inplace=true)
             df.sort_values(by='datetime', ascending=false, inplace=true)
 
@@ -671,7 +671,7 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
                 else:
                     break
             if not isempty:
-                pandas_save(da, fn)
+                pandas_save(da, file)
         return isempty
 
     wheres = [{'k': 'code', 'v': code}]
@@ -1041,6 +1041,16 @@ def notify_to_wx(title, text):
     wx_url = "https://sc.ftqq.com/{0}.send?text={1}&desp={2}".format(
         key, title, text)
     requests.get(wx_url)
+
+
+def get_csv_file(code, dbname):
+    file = '{}/{}_{}.csv'.format(csvpath, code, dbname)
+    return file
+
+
+def get_stat(file):
+    stat = os.stat(file)
+    return stat
 
 
 def check_order():
