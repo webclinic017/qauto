@@ -80,7 +80,7 @@ def touch(fn):
 
 
 def is_task_finished(key, raw_stat):
-    stat = get_stat(task_file)
+    stat = utils.get_stat(task_file)
     is_finished = False
     seconds = 0
     while not is_finished and seconds < 90:
