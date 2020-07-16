@@ -83,8 +83,14 @@ def async_run_strategy2(fund, db=None, dbname='', live=utils.true):
         # 检查k_data是否已更新
         _dbname = 'k_data'
         file = utils.get_csv_file(code, _dbname)
-        stat = utils.get_stat(file)
-        if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+        isupdate = utils.false
+        if utils.os.path.exists(file):
+            stat = utils.get_stat(file)
+            if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+                isupdate = utils.true
+        else:
+            isupdate = utils.true
+        if isupdate:
             utils.update_k_data(
                 code, db=db, dbname=_dbname, live=live, init=utils.false
             )
@@ -100,8 +106,14 @@ async def async_run_strategy(fund, db=None, dbname='', live=utils.true):
         # 检查k_data是否已更新
         _dbname = 'k_data'
         file = utils.get_csv_file(code, _dbname)
-        stat = utils.get_stat(file)
-        if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+        isupdate = utils.false
+        if utils.os.path.exists(file):
+            stat = utils.get_stat(file)
+            if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+                isupdate = utils.true
+        else:
+            isupdate = utils.true
+        if isupdate:
             utils.update_k_data(
                 code, db=db, dbname=_dbname, live=live, init=utils.false
             )
