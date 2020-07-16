@@ -22,7 +22,7 @@ class LogFormatter(tornado.log.LogFormatter):
         )
 
 
-# tornado.options.define("log_file_prefix", default="./log/app.log")
+# # tornado.options.define("log_file_prefix", default="./log/app.log")
 
 tornado.options.parse_command_line()
 [i.setFormatter(LogFormatter()) for i in logging.getLogger().handlers]
