@@ -129,8 +129,8 @@ def get_user_client(broker):
     port = 9000
     u = use(broker, host, port)
     ret = u.unlock
-    print(ret)
-    ret = u.prepare
+    # print(ret)
+    # ret = u.prepare
     print(ret)
     return u
 

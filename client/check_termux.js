@@ -4,12 +4,19 @@ function main() {
     // setInterval(function () {
     //     checkTermux();
     // }, 1000 * 1);
-    checkTermux()
+    checkTermux();
 }
 
-function checkTermux() {
+function checkTermux(retry) {
     var uri = "http://127.0.0.1:9000/ping";
-    common.toastLog("检查 termux");
+    if (!retry) {
+        retry = 0;
+    }
+    common.toastLog("检查 termux, retry {0}".format(retry));
+    if (retry > 2) {
+        // 检查3次后,重启termux
+        restartTermux();
+    }
     try {
         var ret = common.httpGet(uri);
         if (ret && ret.statusMessage == "OK") {
@@ -19,9 +26,13 @@ function checkTermux() {
                 return;
             }
         }
-        restartTermux();
+        retry += 1;
+        common.sleep(3 * retry);
+        checkTermux(retry);
     } catch (err) {
-        restartTermux();
+        retry += 1;
+        common.sleep(5 * retry);
+        checkTermux(retry);
     }
 }
 

@@ -53,6 +53,9 @@ def update_k_5min_data_cron():
     # 交易日检查
     now = datetime.now()
     print(now)
+    broker = 'hb'
+    u = remoteclient.get_user_client(broker)
+    print(u)
     istradeday = utils.is_trade_day(now)
     if not istradeday:
         print('非交易日')
