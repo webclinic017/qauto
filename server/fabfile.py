@@ -1,4 +1,5 @@
 from fabric.api import local, run, cd, env
+import time
 
 from utils import basedir
 
@@ -24,4 +25,7 @@ def deploy():
         run('git checkout .')
         run('git pull')
         run('pkill python')
+        time.sleep(3)
+        run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/utils/monitor_api.sh')
+        time.sleep(3)
         run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/utils/monitor_api.sh')
