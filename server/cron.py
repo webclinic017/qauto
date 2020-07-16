@@ -84,6 +84,7 @@ def update_k_5min_data_cron():
         )
     else:
         print('非交易时间')
+        uc.lock
 
 
 def update_k_data_cron():
@@ -126,7 +127,7 @@ def start():
     scheduler.add_job(auto_ipo, trigger=trigger)
 
     trigger = CronTrigger(
-        hour='9-11,13-15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
+        hour='9,10,11,13,14,15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
     scheduler.add_job(update_k_5min_data_cron,
                       trigger=trigger, max_instances=1)
 
