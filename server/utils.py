@@ -1071,8 +1071,8 @@ def check_order():
             {'k': 'date', 'v': row.date},
             {'k': 'createdtime', 'v': row.createdtime},
         ]
-        # u = remoteclient.get_user_client(row.broker)
-        uc = remoteclient.get_user_client('ht')
+        # u = remoteclient.get_remote_client(row.broker)
+        uc = remoteclient.get_remote_client('ht')
         ret = uc.trade(extras=row.to_dict(), action=row.action)
         if ret['code'] == 0:
             sets.append(

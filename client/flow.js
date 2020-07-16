@@ -69,14 +69,21 @@ flow.launch = function (fun) {
     flow.closeTips(fun);
 
     var current_package = currentPackage();
-    while (current_package != init_param.package_name) {
+    var retry = 0;
+    while (current_package != init_param.package_name && retry < 4) {
+        retry += 1
         common.toastLog(current_package);
         common.toastLog(init_param.package_name);
         var msg = "处于页面检查";
         common.toastLog(msg);
-        common.sleep(3);
+        common.sleep(3 * retry);
         flow.closeTips(fun);
         current_package = currentPackage();
+    }
+    if (retry >= 4) {
+        flow.common.cleanAllApp()
+        flow.sleep(3)
+        flow.launch(fun)
     }
 };
 

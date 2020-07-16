@@ -29,7 +29,9 @@ scheduler = TornadoScheduler(
 
 def auto_ipo():
     broker = 'hb'
-    uc = remoteclient.get_user_client(broker)
+    uc = remoteclient.get_remote_client(broker)
+    uc.unlock
+    utils.time.sleep(10)
     ret = uc.prepare
     print(ret)
     ret = uc.auto_ipo
@@ -38,7 +40,9 @@ def auto_ipo():
 
 def check_rt():
     broker = 'hb'
-    uc = remoteclient.get_user_client(broker)
+    uc = remoteclient.get_remote_client(broker)
+    uc.unlock
+    utils.time.sleep(10)
     ret = uc.prepare
     print(ret)
     extras = dict(
@@ -57,14 +61,14 @@ def update_k_5min_data_cron():
     # 交易日检查
     now = datetime.now()
     print(now)
-    broker = 'hb'
-    uc = remoteclient.get_user_client(broker)
-    print(uc)
     istradeday = utils.is_trade_day(now)
     if not istradeday:
         print('非交易日')
         return
 
+    broker = 'hb'
+    uc = remoteclient.get_remote_client(broker)
+    print(uc)
     # 交易基金(定投策略),twap策略,cmi策略
     funds = constant.live_trade_funds
     if (11 >= now.hour >= 9) or (15 >= now.hour >= 13):
@@ -73,6 +77,8 @@ def update_k_5min_data_cron():
                 print('非交易时间')
                 return
 
+        ret = uc.unlock
+        print(ret)
         funds = constant.live_trade_funds
         db = models.DB()
         dbname = 'k_5min_data'

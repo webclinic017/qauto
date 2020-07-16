@@ -123,20 +123,21 @@ class RemoteClient:
         return res.json()
 
 
-def get_user_client(broker):
+def get_remote_client(broker):
     # host = '172.20.10.14'
     host = '192.168.1.9'
     port = 9000
     uc = use(broker, host, port)
-    ret = uc.unlock
-    print(ret)
     return uc
 
 
 if __name__ == '__main__':
-    broker = 'hte'
-    uc = get_user_client(broker)
-    # ret = uc.auto_ipo
+    broker = 'hb'
+    uc = get_remote_client(broker)
+    uc.unlock
+    time.sleep(10)
+    uc.prepare
+    ret = uc.auto_ipo
     # print(ret)
     # extras = dict(
     #     code='159928',
