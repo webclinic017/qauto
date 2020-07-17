@@ -35,7 +35,7 @@ ave_volumes = {}
 su_prefix = 'su -c '
 am_prefix = 'am start -n org.my.jsbox/org.my.jsbox.external.open.RunIntentActivity '
 
-log_prefix = '{}/log/'.format(utils.basedir)
+log_prefix = '{}/log/'.format(utils.serverdir)
 task_file = '{}/tasks.txt'.format(log_prefix)
 
 
@@ -52,7 +52,7 @@ def routing():
     item = args.to_dict()
     item.pop('user', None)
 
-    path = '/sdcard/JSBOX/main.js'
+    path = '{}/main.js'.format(utils.clientdir)
     extra_str = get_extras_str(item)
     cmd = '{}{} -d {} {}'.format(su_prefix, am_prefix, path, extra_str)
     if not os.path.exists(task_file):
@@ -107,7 +107,7 @@ def get_extras_str(item):
 @app.route('/unlock')
 @login_required
 def unlock():
-    item = dict(d='/sdcard/JSBOX/unlock.js')
+    item = dict(d='{}/unlock.js'.format(utils.clientdir))
     cmd = '{}{}'.format(su_prefix, am_prefix)
     if item.get('d', ''):
         cmd += '-d {}'.format(item['d'])
@@ -125,7 +125,7 @@ def unlock():
 @app.route('/lock')
 @login_required
 def lock():
-    item = dict(d='/sdcard/JSBOX/lock.js')
+    item = dict(d='{}/lock.js'.format(utils.clientdir))
     cmd = '{}{}'.format(su_prefix, am_prefix)
     if item.get('d', ''):
         cmd += '-d {}'.format(item['d'])
@@ -143,7 +143,7 @@ def lock():
 @app.route('/check_termux')
 @login_required
 def check_termux():
-    item = dict(d='/sdcard/JSBOX/check_termux.js')
+    item = dict(d='{}/check_termux.js'.format(utils.clientdir))
     cmd = '{}{}'.format(su_prefix, am_prefix)
     if item.get('d', ''):
         cmd += '-d {}'.format(item['d'])
