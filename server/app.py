@@ -140,6 +140,24 @@ def lock():
         return jsonify(data)
 
 
+@app.route('/check_termux')
+@login_required
+def check_termux():
+    item = dict(d='/sdcard/JSBOX/check_termux.js')
+    cmd = '{}{}'.format(su_prefix, am_prefix)
+    if item.get('d', ''):
+        cmd += '-d {}'.format(item['d'])
+
+    status, _ = subprocess.getstatusoutput(cmd)
+    data = dict(msg='success', code=0)
+    if status == 0:
+        return jsonify(data)
+    else:
+        data['msg'] = 'error'
+        data['code'] = 1
+        return jsonify(data)
+
+
 @app.route('/get_volume')
 def get_volume():
     args = request.args

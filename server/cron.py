@@ -57,6 +57,17 @@ def cron_test():
     print(now)
 
 
+def keep_server_alive_cron():
+    broker = 'hb'
+    uc = remoteclient.get_remote_client(broker)
+    print(uc)
+    uc.unlock
+    uc.time.sleep(3)
+    uc.check_termux
+    utils.time.sleep(60*5)
+    uc.lock
+
+
 def update_k_5min_data_cron():
     # 交易日检查
     now = datetime.now()
@@ -133,7 +144,12 @@ def start():
     scheduler.add_job(auto_ipo, trigger=trigger)
 
     trigger = CronTrigger(
-        hour='9,10,11,13,14,15', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
+        hour='9,10,11,13,14', minute='0,5,10,15,20,25,30,35,40,45,50,55', second='30')
+    scheduler.add_job(update_k_5min_data_cron,
+                      trigger=trigger, max_instances=1)
+
+    trigger = CronTrigger(
+        hour='0,1,2,3,4,5,6,7,8,15,16,17,18,19,20,21,22,23', minute='0', second='30')
     scheduler.add_job(update_k_5min_data_cron,
                       trigger=trigger, max_instances=1)
 

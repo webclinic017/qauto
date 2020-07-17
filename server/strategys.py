@@ -226,7 +226,7 @@ class BaseStrategy(bt.Strategy):
         o = models.Order()
         if not self.p._live:
             o.upsert_order(df)
-        if dtcp.days == 0 and dtcp.seconds < 24 * 60 * 60:
+        if dtcp.days == 0 and dtcp.seconds < 12 * 60 * 60:
             utils.notify_to_wx(title, text)
 
     def get_weight(self, datas, add=utils.false):

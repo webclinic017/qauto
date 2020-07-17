@@ -27,14 +27,24 @@ class RemoteClient:
     @property
     def unlock(self):
         args = self.gen_args()
-        url = '{}/{}?{}'.format(self._api, 'unlock', args)
+        endpoint = sys._getframe().f_code.co_name
+        url = '{}/{}?{}'.format(self._api, endpoint, args)
         res = self._s.get(url)
         return res.json()
 
     @property
     def lock(self):
         args = self.gen_args()
-        url = '{}/{}?{}'.format(self._api, 'lock', args)
+        endpoint = sys._getframe().f_code.co_name
+        url = '{}/{}?{}'.format(self._api, endpoint, args)
+        res = self._s.get(url)
+        return res.json()
+
+    @property
+    def check_termux(self):
+        args = self.gen_args()
+        endpoint = sys._getframe().f_code.co_name
+        url = '{}/{}?{}'.format(self._api, endpoint, args)
         res = self._s.get(url)
         return res.json()
 
