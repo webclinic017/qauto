@@ -25,4 +25,4 @@ def deploy():
         run('git checkout .')
         run('git pull')
         run('pkill python')
-        run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/utils/monitor_api.sh')
+        run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/qauto/config/monitor_api.sh')
