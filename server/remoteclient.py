@@ -136,8 +136,8 @@ if __name__ == '__main__':
     uc = get_remote_client(broker)
     uc.unlock
     time.sleep(10)
-    uc.prepare
-    ret = uc.auto_ipo
+    # uc.prepare
+    # ret = uc.auto_ipo
     # print(ret)
     # extras = dict(
     #     code='159928',

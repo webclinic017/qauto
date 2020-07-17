@@ -30,10 +30,11 @@ multiperiod = 'k_5min_data'
 
 # 159928,单纯twap表现优秀,cmi表现不佳???,cmi取值有问题???
 # 162703,twap表现远不如cmi,round长期持有???
-cerebro.addstrategy(strategys.TWAPMultiStrategy,
-                    _live=utils.true, multiperiod=multiperiod, orderlog=utils.false, tradelog=utils.true, doprint=utils.true)
-# cerebro.addstrategy(strategys.TWAPMultiStrategy, doprint=utils.true, orderlog=utils.false, tradelog=utils.true)
-start = '2020-01-22'
+# cerebro.addstrategy(strategys.TWAPMultiStrategy,
+#                     _live=utils.true, multiperiod=multiperiod, orderlog=utils.false, tradelog=utils.true, doprint=utils.true)
+cerebro.addstrategy(strategys.SchedStrategy,
+                    multiperiod=multiperiod, doprint=utils.true, orderlog=utils.false, tradelog=utils.true)
+start = '2019-06-22'
 end = '2020-06-22'
 
 # df = utils.get_database_data(code, start)
@@ -46,18 +47,20 @@ end = '2020-06-22'
 # pk = 'code'
 # codes = utils.get_distinct_codes(dbname, pk)
 
-codes = constant.trade_funds
+funds = constant.trade_funds
 # codes = ['002027', '000725']
 # codes = utils.get_my_etf()
 
-for code, code_cn in codes.items():
+for fund in funds:
+    code = fund['code']
+    code_cn = fund['code_cn']
     dbnames = ['k_data']
     if multiperiod:
         dbnames.append(multiperiod)
         for dbname in dbnames:
             df = utils.get_database_data(
                 code, dbname=dbname, start=start, end=end)
-            print(df)
+            # print(df)
             if df.empty:
                 print(code, '未获取到数据')
                 continue
@@ -67,7 +70,7 @@ for code, code_cn in codes.items():
     else:
         df = utils.get_database_data(
             code, dbname=dbnames[0], start=start, end=end)
-        print(df)
+        # print(df)
         data = models.PandasData(dataname=df, name='')
         cerebro.adddata(data)
 
@@ -81,7 +84,7 @@ utils.addanalyzer(cerebro)
 
 startcash = 20000  # 测试期货需调整
 cerebro.broker.setcash(startcash)
-cerebro.broker.setcommission(commission=0.0001)
+cerebro.broker.setcommission(commission=0.00001)
 print('Starting Portfolio Value: %.3f' % cerebro.broker.getvalue())
 strats = cerebro.run(maxcpus=1, optreturn=utils.true)
 strat = strats[0]

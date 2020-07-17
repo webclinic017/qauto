@@ -164,6 +164,19 @@ class MOM(bt.Indicator):
         super(MOM, self).__init__()
 
 
+class MOMOSC(bt.Indicator):
+    lines = ('momosc',)
+    params = dict(
+        period=13,
+    )
+
+    def __init__(self, data=None):
+        if not isinstance(data, models.PandasData):
+            data = self.data
+        self.l.momosc = 100.0 * ((data - data(-self.p.period))/data)
+        super(MOMOSC, self).__init__()
+
+
 class MTM(bt.Indicator):
     lines = ('mtm',)
     params = dict(

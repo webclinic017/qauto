@@ -33,9 +33,10 @@ class BaseStrategy(bt.Strategy):
         doprint=utils.false,
         tradelog=utils.false,
         orderlog=utils.false,
-        _live=utils.false,
+        _live=utils.false,  # 开启实盘交易
         tradestrats={},
         orderstrats={},
+        multiperiod='',  # 开启多周期回测
 
         pks='',  # 以下为优化参数使用
         db=None,
@@ -65,6 +66,9 @@ class BaseStrategy(bt.Strategy):
                         # 动量指标,与前N日价格比较*100
                         self.__dict__[ind][code] = cinds.MOM(
                             data=data, period=self.p.momperiod)
+                    elif ind == 'momosc':
+                        self.__dict__[ind][code] = cinds.MOMOSC(
+                            data=data, period=self.p.momoscperiod)
                     elif ind == 'cmi':
                         # 市场波动指数CMI,如果CMI < 20,执行震荡策略,如果CMI ≥ 20，执行趋势策略
                         self.__dict__[ind][code] = cinds.CMI(
@@ -200,7 +204,7 @@ class BaseStrategy(bt.Strategy):
         datadt = self.data.num2date(order.data.datetime[0])
         date = utils.get_datetime_date(datadt, flag='-')
         dtcp = datetime.now() - datadt
-        text = '{}:{}:{}:{}:{}'.format(date, code, code_cn, size, price)
+        text = '{}:{}:{}:{}:{}'.format(datadt, code, code_cn, size, price)
         print(title, text)
         value = utils.get_float(price * size)
         tp = int(datadt.timestamp())
@@ -1650,105 +1654,87 @@ class SchedStrategy(BaseStrategy):
         maxrise=2.5,
         buysize=100,
         sellsize=100,
+
+        momoscperiod=1,
+        smaperiod=16,
     )
 
     def __init__(self):
-        self.orders = {}
-        self.bband = bt.ind.BBands(self.data.close)  # top,bot,mid 布林线上轨,下轨,中轨
-        self.D = self.get_d_value()  # KDJ,D值,超买&超卖检查
+        self.inds = ['momosc', 'D', 'sma']
+        self.hasdones = {}
+        super(SchedStrategy, self).__init__()
 
     def next(self):
         if self.p.optpass:
             return
-        dt = self.get_datetime()
-        if (self.cerebro.params.live):
-            # 实盘
-            pretimestamp = utils.get_last_trade_day(_type='timestamp')
-            if not pretimestamp:
-                msg = '没有前一日交易日期,跳过'
-                self.log(msg)
-                return
-            code = self.data.code[0]
-            wheres = [
-                {'k': 'code', 'v': utils.get_code_string(code), 'op': '='},
-                {'k': 'timestamp', 'v': pretimestamp, 'op': '='},
-            ]
-            dbname = 'k_data'
-            df = self.p.db.select(dbname, wheres=wheres)
-            if df.empty:
-                msg = '没有前一日交易信息,跳过'
-                self.log(msg)
-                return
-            preclose = df['close'].values[0]
-        else:
-            offset = self.get_offset()
-            try:
-                preclose = self.data.close[-offset]
-                predatetime = self.datetime.datetime(-offset)
-                if predatetime.day == dt.day:
-                    msg = '没有前一日收盘价,跳过'
-                    self.log(msg)
-                    return
-            except Exception as ex:
-                self.log(ex)
-                return
+        for data in self.datas:
+            code = utils.get_code_string(data.code[0])
 
-        close = self.data.close[0]
-        pricerise = ((close - preclose) / close) * 100
-        msg = '开盘价{:.3f}, 收盘价:{:.3f}, 上一日收盘价:{:.3f}, 涨幅:{:.3f}'.format(
-            self.data.open[0], close, preclose, pricerise)
-        key = utils.get_datetime_date(dt, flag='-')
+            if self.p.multiperiod:
+                # 过滤5分钟k线
+                if self.p.multiperiod in data._name:
+                    continue
 
-        # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
+            dones = self.hasdones.get(code, [])
+            datalen = len(data)
+            if datalen in dones:
+                continue
+            dones.append(datalen)
+            self.hasdones.update({code: dones})
 
-        # 盘中检查
-        if pricerise < self.p.minrise:
-            # 检查今日是否已购买
-            buykey = '{0}:{1}'.format(key, 'buy')
-            buycount = self.orders.get(buykey, 0)
-            if buycount < 1:
+            datadt = self.data.num2date(data.datetime[0])
+            momosc = self.momosc[code]
+            pricerise = momosc[0]
+
+            # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
+
+            # 盘中检查
+            if pricerise < self.p.minrise:
+                # 检查今日是否已购买
                 tradesize = self.get_trade_size(pricerise, 'buy')
-                self.order = self.buy(size=tradesize, price=close)
-                buycount += 1
-                self.orders[buykey] = buycount
-        elif pricerise > self.p.maxrise:
-            sellkey = '{0}:{1}'.format(key, 'sell')
-            sellcount = self.orders.get(sellkey, 0)
-            if sellcount < 1:
+                self.order = self.buy(data, size=tradesize)
+            elif pricerise > self.p.maxrise:
                 tradesize = self.get_trade_size(pricerise, 'sell')
-                self.order = self.sell(size=tradesize, price=close)
-                sellcount += 1
-                self.orders[sellkey] = sellcount
+                self.order = self.sell(data, size=tradesize)
 
-        # if self.bband.bot[0] > self.data.close[0]:
-        #     tradesize = self.get_trade_size(pricerise, 'buy')
-        #     self.order = self.buy(size=tradesize, price=close)
+            # if self.bband.bot[0] > self.data.close[0]:
+            #     tradesize = self.get_trade_size(pricerise, 'buy')
+            #     self.order = self.buy(size=tradesize, price=close)
 
-        # if self.bband.top[0] < self.data.close[0]:
-        #     # 突破布林带上轨
-        #     tradesize = self.get_trade_size(pricerise, 'sell')
-        #     self.order = self.sell(size=tradesize, price=close)
+            # if self.bband.top[0] < self.data.close[0]:
+            #     # 突破布林带上轨
+            #     tradesize = self.get_trade_size(pricerise, 'sell')
+            #     self.order = self.sell(size=tradesize, price=close)
 
-        # elif (14 <= dt.hour < 15) and (45 < dt.minute < 55):
-        #     # 盘尾加仓,类似定投,积累足够筹码
-        #     if pricerise < -self.p.perrise:
-        #         buykey = '{0}:{1}'.format(key, 'buy')
-        #         buycount = self.orders.get(buykey, 0)
-        #         if buycount < 2:
-        #             tradesize = self.get_trade_size(pricerise)
-        #             # buysize = self.p.buysize
-        #             self.log('BUY CREATE, %s, 买入: %.1f股' % (msg, tradesize))
-        #             self.order = self.buy(size=tradesize)
-        #             buycount += 1
-        #             self.orders[buykey] = buycount
+            # elif (14 <= dt.hour < 15) and (45 < dt.minute < 55):
+            #     # 盘尾加仓,类似定投,积累足够筹码
+            #     if pricerise < -self.p.perrise:
+            #         buykey = '{0}:{1}'.format(key, 'buy')
+            #         buycount = self.orders.get(buykey, 0)
+            #         if buycount < 2:
+            #             tradesize = self.get_trade_size(pricerise)
+            #             # buysize = self.p.buysize
+            #             self.log('BUY CREATE, %s, 买入: %.1f股' % (msg, tradesize))
+            #             self.order = self.buy(size=tradesize)
+            #             buycount += 1
+            #             self.orders[buykey] = buycount
 
-    def get_offset(self):
-        # dt = self.get_datetime()
-        # dtcompare = datetime.datetime(dt.year, dt.month, dt.day, 9, 30)
-        # offsetseconds = (dt - dtcompare).total_seconds()
-        # offset = int(offsetseconds / 60 / 5)
-        offset = 1
-        return offset
+    def get_d_times(self, flag):
+        # 超买,超卖检查
+        d_times = 1
+        code = utils.get_code_string(self.data.code[0])
+        drate = self.D[code][0]
+        if flag == 'buy':
+            if drate > 80:
+                d_times = 80 / drate
+            if drate < 20:
+                d_times = 20 / drate
+        elif flag == 'sell':
+            if drate < 20:
+                d_times = drate / 20
+            if drate > 80:
+                d_times = drate / 80
+        return d_times
 
     def get_trade_size(self, pricerise, flag):
         # 根据大盘上证综指PETTM估值判断
@@ -1763,32 +1749,23 @@ class SchedStrategy(BaseStrategy):
         tradesize = math.ceil(self.p.buysize * tradetimes / 100) * 100
         return tradesize
 
+    def get_offset(self):
+        # dt = self.get_datetime()
+        # dtcompare = datetime.datetime(dt.year, dt.month, dt.day, 9, 30)
+        # offsetseconds = (dt - dtcompare).total_seconds()
+        # offset = int(offsetseconds / 60 / 5)
+        offset = 1
+        return offset
+
     def get_pos_times(self, flag):
         postimes = 1
-        if flag == 'sell':
-            pos = self.getposition()
-            if pos:
-                # 不止损
-                if pos.price_orig < self.data.close[0]:
-                    postimes = 0.3
+        # if flag == 'sell':
+        #     pos = self.getposition()
+        #     if pos:
+        #         # 不止损
+        #         if pos.price_orig < self.data.close[0]:
+        #             postimes = 0.3
         return postimes
-
-    def get_d_times(self, flag):
-        # 超买,超卖检查
-        d_times = 1
-        if flag == 'buy':
-            if self.D[0] > 80:
-                # d_times = 80 / self.D[0] / 1.5
-                d_times = 80 / self.D[0]
-            if self.D[0] < 20:
-                d_times = 20 / self.D[0]
-        elif flag == 'sell':
-            if self.D[0] < 20:
-                # d_times = self.D[0] / 20 / 1.5
-                d_times = self.D[0] / 20
-            if self.D[0] > 80:
-                d_times = self.D[0] / 80
-        return d_times
 
     def get_pe_times(self, flag):
         # 历史百分位计算: https://xueqiu.com/4579887327/142536174
