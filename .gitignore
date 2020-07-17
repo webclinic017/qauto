@@ -1,9 +1,4 @@
 .DS_Store
-template.js
-common.js
-main.js
-helper.js
-wx.js
 build.prop
 build.prop.template
 pyecharts/*

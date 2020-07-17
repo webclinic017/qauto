@@ -30,7 +30,7 @@ scheduler = TornadoScheduler(
 def auto_ipo():
     broker = 'hb'
     uc = remoteclient.get_remote_client(broker)
-    uc.unlock
+    # uc.unlock
     utils.time.sleep(10)
     ret = uc.prepare
     print(ret)
@@ -41,7 +41,7 @@ def auto_ipo():
 def check_rt():
     broker = 'hb'
     uc = remoteclient.get_remote_client(broker)
-    uc.unlock
+    # uc.unlock
     utils.time.sleep(10)
     ret = uc.prepare
     print(ret)
@@ -61,11 +61,11 @@ def keep_server_alive_cron():
     broker = 'hb'
     uc = remoteclient.get_remote_client(broker)
     print(uc)
-    uc.unlock
-    uc.time.sleep(3)
+    # uc.unlock
+    utils.time.sleep(3)
     uc.check_termux
     utils.time.sleep(60*5)
-    uc.lock
+    # uc.lock
 
 
 def update_k_5min_data_cron():
@@ -88,8 +88,8 @@ def update_k_5min_data_cron():
                 print('非交易时间')
                 return
 
-        ret = uc.unlock
-        print(ret)
+        # ret = uc.unlock
+        # print(ret)
         funds = constant.live_trade_funds
         db = models.DB()
         dbname = 'k_5min_data'
@@ -101,7 +101,7 @@ def update_k_5min_data_cron():
         )
     else:
         print('非交易时间')
-        uc.lock
+        # uc.lock
 
 
 def update_k_data_cron():
