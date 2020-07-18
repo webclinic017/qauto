@@ -24,8 +24,5 @@ var common = require("./common");
 
 
 // extras = common.engineArgsGet();
-// common.toastLog(extras)
-common.netStatus()
-
-var tel_ele = text('电话').findOnce()
-common.toastLog(tel_ele)
+// common.toastLog(222)
+common.checkAutoService()

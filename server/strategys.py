@@ -203,7 +203,8 @@ class BaseStrategy(bt.Strategy):
             title = '卖出提示'
         datadt = self.data.num2date(order.data.datetime[0])
         date = utils.get_datetime_date(datadt, flag='-')
-        dtcp = datetime.now() - datadt
+        nowdate = utils.get_datetime_date(flag='-')
+        datadate = utils.get_datetime_date(datadt, flag='-')
         text = '{}:{}:{}:{}:{}'.format(datadt, code, code_cn, size, price)
         print(title, text)
         value = utils.get_float(price * size)
@@ -226,7 +227,7 @@ class BaseStrategy(bt.Strategy):
         o = models.Order()
         if not self.p._live:
             o.upsert_order(df)
-        if dtcp.days == 0 and dtcp.seconds < 12 * 60 * 60:
+        if nowdate == datadate:
             utils.notify_to_wx(title, text)
 
     def get_weight(self, datas, add=utils.false):
@@ -306,14 +307,15 @@ class BaseStrategy(bt.Strategy):
                 data.datetime[0]) + timedelta(days=-30)
         return transaction
 
-    def is_trade_done(self, date, code):
+    def is_trade_done(self, datadt, code):
+        datadate = utils.get_datetime_date(datadt, flag='-')
         istradedone = utils.false
         for x, y in self.analyzers.transactions.get_analysis().items():
             tcode = y[0][3].split(':')[0]
             if tcode != code:
                 continue
-            dtcp = date - x
-            if dtcp.days == 0 and dtcp.seconds < 24 * 60 * 60:
+            xdate = utils.get_datetime_date(x, flag='-')
+            if xdate == datadate:
                 istradedone = utils.true
                 break
 
@@ -1028,7 +1030,7 @@ class TWAPMultiStrategy(BaseStrategy):
         tradelst = []
         for data in self.datas:
             code = utils.get_code_string(data.code[0])
-            date = bt.num2date(data.datetime[0])
+            datadt = bt.num2date(data.datetime[0])
 
             # 过滤5分钟k线
             if self.p.multiperiod:
@@ -1041,7 +1043,7 @@ class TWAPMultiStrategy(BaseStrategy):
                     # 小周期突破均线入场,K线大于均线,上个K线小于均线
                     if data.close[0] >= sma[0] and data.close[-1] < sma[-1] and trade['flag'] == 'buy':
                         # 检查当天订单是否已完成
-                        istradedone = self.is_trade_done(date, code)
+                        istradedone = self.is_trade_done(datadt, code)
                         if istradedone:
                             continue
 
@@ -1075,7 +1077,7 @@ class TWAPMultiStrategy(BaseStrategy):
                 data=data,
                 code=code,
                 mom=mom[0],
-                datetime=datetime,
+                datetime=datadt,
             )
             pos = self.get_postion(code)
             haspos = utils.false

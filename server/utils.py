@@ -45,7 +45,7 @@ basedir = '/data/data/com.termux/files/home/qauto/'
 serverdir = '{}/server/'.format(basedir)
 clientdir = '{}/client/'.format(basedir)
 if sys.platform == 'linux':
-    os.chdir(basedir)
+    os.chdir(serverdir)
 
 htmlpath = 'html'
 csvpath = 'csv'

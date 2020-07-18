@@ -315,10 +315,11 @@ common.unLockRetry = function () {
 common.unLock = function () {
     var tel_ele = text("电话").findOnce();
     common.toastLog(tel_ele);
+    common.toastLog(111)
     if (tel_ele) {
         common.toastLog("已解锁");
     }
-    Home();
+    // Home();
     var isLock = true;
     var isWakeUp = common.wakeUp();
     if (isWakeUp) {
