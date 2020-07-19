@@ -112,6 +112,7 @@ def unlock():
     if item.get('d', ''):
         cmd += '-d {}'.format(item['d'])
 
+    print(cmd)
     status, _ = subprocess.getstatusoutput(cmd)
     data = dict(msg='success', code=0)
     if status == 0:
