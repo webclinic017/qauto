@@ -2,8 +2,8 @@ from fabric.api import local, run, cd, env
 
 from utils import basedir
 
-# env.hosts = ['192.168.1.9:8022']
-env.hosts = ['172.20.10.14:8022']
+env.hosts = ['192.168.1.2:8022']
+# env.hosts = ['172.20.10.14:8022']
 
 
 def commit():
