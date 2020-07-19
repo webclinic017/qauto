@@ -41,9 +41,9 @@ CurrentConfig.ONLINE_HOST = OnlineHostType.NOTEBOOK_HOST
 true = True
 false = False
 
-basedir = '/data/data/com.termux/files/home/qauto/'
-serverdir = '{}/server/'.format(basedir)
-clientdir = '{}/client/'.format(basedir)
+basedir = '/data/data/com.termux/files/home/qauto'
+serverdir = '{}/server'.format(basedir)
+clientdir = '{}/client'.format(basedir)
 if sys.platform == 'linux':
     os.chdir(serverdir)
 

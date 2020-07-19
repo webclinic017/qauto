@@ -135,7 +135,7 @@ class RemoteClient:
 
 def get_remote_client(broker):
     # host = '172.20.10.14'
-    host = '192.168.1.9'
+    host = '192.168.1.2'
     port = 9000
     uc = use(broker, host, port)
     return uc
@@ -144,7 +144,8 @@ def get_remote_client(broker):
 if __name__ == '__main__':
     broker = 'hb'
     uc = get_remote_client(broker)
-    uc.unlock
+    ret = uc.unlock
+    print(ret)
     time.sleep(10)
     # uc.prepare
     # ret = uc.auto_ipo
