@@ -7,6 +7,7 @@ import strategys
 import models
 from datetime import datetime, timedelta
 import asyncio
+from tornado import ioloop, gen
 
 import utils
 import constant
@@ -75,7 +76,7 @@ def run_strategy(fund, live):
     start_strategy(strategy, code, code_cn, live)
 
 
-def async_run_strategy2(fund, db=None, dbname='', live=utils.true):
+def one_run_strategy(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
@@ -98,7 +99,8 @@ def async_run_strategy2(fund, db=None, dbname='', live=utils.true):
         run_strategy(fund, live)
 
 
-async def async_run_strategy(fund, db=None, dbname='', live=utils.true):
+@gen.coroutine
+def tornado_run_strategy(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
@@ -121,14 +123,38 @@ async def async_run_strategy(fund, db=None, dbname='', live=utils.true):
         run_strategy(fund, live)
 
 
-async def async_update_live_k_data(fund, db=None, dbname='', live=utils.true):
+@gen.coroutine
+def tornado_update_k_data(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     utils.update_k_data(
         code, db=db, dbname=dbname, live=live, init=utils.false
     )
 
 
-def async_update_live_k_data2(fund, db=None, dbname='', live=utils.true):
+async def asyncio_run_strategy(fund, db=None, dbname='', live=utils.true):
+    code = fund['code']
+    isempty = utils.update_k_5min_data(
+        code, db=db, dbname=dbname, live=live, init=utils.false)
+    if live:
+        # 检查k_data是否已更新
+        _dbname = 'k_data'
+        file = utils.get_csv_file(code, _dbname)
+        isupdate = utils.false
+        if utils.os.path.exists(file):
+            stat = utils.get_stat(file)
+            if int(utils.time.time()) - stat.st_mtime > 60*60*12:
+                isupdate = utils.true
+        else:
+            isupdate = utils.true
+        if isupdate:
+            utils.update_k_data(
+                code, db=db, dbname=_dbname, live=live, init=utils.false
+            )
+    if not isempty:
+        run_strategy(fund, live)
+
+
+async def asyncio_update_k_data(fund, db=None, dbname='', live=utils.true):
     code = fund['code']
     utils.update_k_data(
         code, db=db, dbname=dbname, live=live, init=utils.false
@@ -142,11 +168,11 @@ if __name__ == "__main__":
     live = utils.true
     dbname = 'k_5min_data'
     # dbname = 'k_data'
-    for fund in funds:
-        # async_update_live_k_data2(fund, db, dbname)
-        async_run_strategy2(fund, db, dbname, live)
-        # run_strategy(fund)
+    # for fund in funds:
+    #     # tornado_run_strategy(fund, db, dbname, live)
+    #     one_run_strategy(fund, db, dbname, live)
 
-    # utils.asyncio_tasks(async_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
+    # utils.tornado_tasks(tornado_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
 
-    # utils.async_tasks(async_run_strategy2, tasks=funds, db=db, dbname=dbname)
+    utils.asyncio_tasks(asyncio_run_strategy, tasks=funds,
+                        db=db, dbname=dbname, live=live)

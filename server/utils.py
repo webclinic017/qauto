@@ -10,6 +10,7 @@ import os
 import sys
 
 import asyncio
+from tornado import ioloop, gen
 
 from pprint import pprint
 import pyecharts.options as opts
@@ -859,13 +860,21 @@ def asyncgreelet_tasks(func, tasks, *args, **kw):
 
 
 def asyncio_tasks(func, tasks, *args, **kw):
-    new_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(new_loop)
-    # loop = asyncio.get_event_loop()
+    if 'loop' in locals():
+        loop = asyncio.get_event_loop()
+    else:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     coroutines = [func(task, *args, **kw) for task in tasks]
     wait_coroutines = asyncio.wait(coroutines)
-    new_loop.run_until_complete(wait_coroutines)
-    new_loop.close()
+    loop.run_until_complete(wait_coroutines)
+    loop.close()
+
+
+@gen.coroutine
+def tornado_tasks(func, tasks, *args, **kw):
+    for task in tasks:
+        yield func(task, *args, **kw)
 
 
 def get_morning_star(first=true, data={}):

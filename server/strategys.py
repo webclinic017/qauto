@@ -1677,14 +1677,14 @@ class SchedStrategy(BaseStrategy):
                 if self.p.multiperiod in data._name:
                     continue
 
-            dones = self.hasdones.get(code, [])
-            datalen = len(data)
-            if datalen in dones:
-                continue
-            dones.append(datalen)
-            self.hasdones.update({code: dones})
+                dones = self.hasdones.get(code, [])
+                datalen = len(data)
+                if datalen in dones:
+                    continue
+                dones.append(datalen)
+                self.hasdones.update({code: dones})
 
-            datadt = self.data.num2date(data.datetime[0])
+            # datadt = self.data.num2date(data.datetime[0])
             momosc = self.momosc[code]
             pricerise = momosc[0]
 
@@ -1760,13 +1760,13 @@ class SchedStrategy(BaseStrategy):
         return offset
 
     def get_pos_times(self, flag):
+        # 不止损,持仓亏损,卖出0.3
         postimes = 1
-        # if flag == 'sell':
-        #     pos = self.getposition()
-        #     if pos:
-        #         # 不止损
-        #         if pos.price_orig < self.data.close[0]:
-        #             postimes = 0.3
+        if flag == 'sell':
+            pos = self.getposition()
+            if pos:
+                if pos.price_orig < self.data.close[0]:
+                    postimes = 0.3
         return postimes
 
     def get_pe_times(self, flag):
@@ -1784,6 +1784,8 @@ class SchedStrategy(BaseStrategy):
         # 当前市盈率与平均市盈率比较,以上证指数为基准
         # 当前市盈率大于平均市盈率,买入少,卖出多
         # 小于平均市盈率,买入多,卖出少
+
+        # 估值判断
         if self.p.petype == '':
             return 1
         dbname = 'index_dailybasic'

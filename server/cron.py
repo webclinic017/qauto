@@ -3,6 +3,9 @@ from datetime import datetime
 from apscheduler.schedulers.tornado import TornadoScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from tornado import ioloop, gen
+import asyncio
+
 from pytz import utc
 
 import constant
@@ -52,9 +55,18 @@ def check_rt():
     print(ret)
 
 
-def cron_test():
+@gen.coroutine
+def test_tornado(num):
     now = datetime.now()
-    print(now)
+    print(now, num)
+
+
+def test_cron():
+    tasks = range(3, 8)
+    utils.asyncio_tasks(
+        test_tornado,
+        tasks=tasks
+    )
 
 
 def keep_server_alive_cron():
@@ -94,10 +106,10 @@ def update_k_5min_data_cron():
         db = models.DB()
         dbname = 'k_5min_data'
         utils.asyncio_tasks(
-            qauto_live.async_run_strategy,
+            qauto_live.asyncio_run_strategy,
             tasks=funds,
             db=db,
-            dbname=dbname
+            dbname=dbname,
         )
     else:
         print('非交易时间')
@@ -114,13 +126,11 @@ def update_k_data_cron():
     funds = constant.live_trade_funds
     db = models.DB()
     dbname = 'k_data'
-    live = utils.true
     utils.asyncio_tasks(
-        qauto_live.async_update_live_k_data,
+        qauto_live.asyncio_run_strategy,
         tasks=funds,
         db=db,
         dbname=dbname,
-        live=live,
     )
 
 
@@ -133,11 +143,13 @@ def update_index_daily_cron():
 
 
 def start():
-    # 更新分钟数据,策略下单使用
+    # 测试
     # trigger = CronTrigger(second='*/1')
-    # scheduler.add_job(cron_test, trigger=trigger)
+    # scheduler.add_job(test_cron, trigger=trigger)
 
+    # 更新分钟数据,策略下单使用
     # 自动打新,检查溢价
+
     trigger = CronTrigger(hour=14, minute=45)
     scheduler.add_job(check_rt, trigger=trigger)
     trigger = CronTrigger(hour=9, minute=25)
@@ -154,7 +166,6 @@ def start():
                       trigger=trigger, max_instances=1)
 
     trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=21, minute=10)
-    # trigger = CronTrigger(trigger)
     scheduler.add_job(update_k_data_cron, trigger=trigger)
     scheduler.start()
     scheduler.print_jobs()
@@ -169,5 +180,5 @@ def start():
 if __name__ == "__main__":
     print('start...')
     start()
-    # update_k_data_cron()
+    ioloop.IOLoop.instance().start()
     print('end...')
