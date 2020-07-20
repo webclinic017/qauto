@@ -71,7 +71,7 @@ flow.launch = function (fun) {
     var current_package = currentPackage();
     var retry = 0;
     while (current_package != init_param.package_name && retry < 4) {
-        retry += 1
+        retry += 1;
         common.toastLog(current_package);
         common.toastLog(init_param.package_name);
         var msg = "处于页面检查";
@@ -81,9 +81,9 @@ flow.launch = function (fun) {
         current_package = currentPackage();
     }
     if (retry >= 4) {
-        flow.common.cleanAllApp()
-        flow.sleep(3)
-        flow.launch(fun)
+        flow.common.cleanAllApp();
+        flow.sleep(3);
+        flow.launch(fun);
     }
 };
 
@@ -118,7 +118,8 @@ flow.autoIpo = function (fun) {
                     common.toastLog(user_no);
                     var hasipo = storage_app.get(key, false);
                     if (!hasipo) {
-                        user.click();
+                        // user.click();
+                        click(user_no);
                         common.sleep(5);
                         var num = fun.autoIpo(fun, user_no);
                         if (num == 0) {

@@ -144,9 +144,9 @@ def get_remote_client(broker):
 if __name__ == '__main__':
     broker = 'hb'
     uc = get_remote_client(broker)
-    ret = uc.unlock
+    ret = uc.lock
     print(ret)
-    time.sleep(10)
+    # time.sleep(10)
     # uc.prepare
     # ret = uc.auto_ipo
     # print(ret)
