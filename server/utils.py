@@ -651,7 +651,10 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
         file = get_csv_file(code, dbname)
         if init:
             df.code = df.code.apply(lambda x: str(x))
-            pandas_save(df, file)
+            # 过滤下一个5分钟K线
+            querystr = 'timestamp < {}'.format(int(time.time()))
+            da = df.query(querystr)
+            pandas_save(da, file)
             return false
 
         isempty = true
@@ -660,13 +663,12 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
                             _type=_type, freq=freq, live=live, init=true)
             isempty = false
         else:
-            now = datetime.now()
             da = pd.read_csv(file)
             df.reset_index(drop=true, inplace=true)
             df.sort_values(by='datetime', ascending=false, inplace=true)
 
             for _, row in df.iterrows():
-                # 过滤下一个5分钟数据
+                # 过滤下一个5分钟K线
                 if row.timestamp > int(time.time()):
                     continue
                 querys = dict(
