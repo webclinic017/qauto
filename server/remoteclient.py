@@ -144,11 +144,11 @@ def get_remote_client(broker):
 if __name__ == '__main__':
     broker = 'hb'
     uc = get_remote_client(broker)
-    ret = uc.lock
+    ret = uc.unlock
     print(ret)
     # time.sleep(10)
-    # uc.prepare
-    # ret = uc.auto_ipo
+    uc.prepare
+    ret = uc.auto_ipo
     # print(ret)
     # extras = dict(
     #     code='159928',

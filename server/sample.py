@@ -88,7 +88,7 @@ cerebro.broker.setcommission(commission=0.00001)
 print('Starting Portfolio Value: %.3f' % cerebro.broker.getvalue())
 strats = cerebro.run(maxcpus=1, optreturn=utils.true)
 strat = strats[0]
-utils.print_transaction(strat)
+# utils.print_transaction(strat)
 # accountinfo = strat.analyzers.AccountValue.get_analysis()
 # data = utils.getstratdata(strat, accountinfo)
 # utils.plot_strategy(

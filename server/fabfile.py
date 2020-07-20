@@ -26,4 +26,4 @@ def deploy():
         run('git pull')
         run('pkill python')
         run('cp client/* JSBox')
-        run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/qauto/config/monitor_api.sh')
+        run('/data/data/com.termux/files/usr/bin/sh /data/data/com.termux/files/home/qauto/config/monitor_api.sh python')

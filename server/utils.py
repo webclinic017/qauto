@@ -660,11 +660,15 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
                             _type=_type, freq=freq, live=live, init=true)
             isempty = false
         else:
+            now = datetime.now()
             da = pd.read_csv(file)
             df.reset_index(drop=true, inplace=true)
             df.sort_values(by='datetime', ascending=false, inplace=true)
 
             for _, row in df.iterrows():
+                # 过滤下一个5分钟数据
+                if row.timestamp > int(time.time()):
+                    continue
                 querys = dict(
                     code=row.code,
                     timestamp=row.timestamp,
