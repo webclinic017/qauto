@@ -15,6 +15,18 @@ from indicators import ssa_index_ind, VWAP, TWAP
 # http://www.vincentsblog.com/post/backtrader-backtest-ashare
 # multi strategy: https://community.backtrader.com/topic/2122/live-trading-multiple-strategies-each-one-on-a-separate-data-feed/6
 
+# 入门: https://blog.csdn.net/ndhtou222/article/details/105236618?utm_medium=distribute.pc_relevant.none-task-blog-baidujs-2
+# 入门: https://blog.csdn.net/halcyonbaby/article/details/104704079
+# 入门: https://blog.csdn.net/m0_46603114/category_9820181.html
+# 进阶: https://zhuanlan.zhihu.com/c_1189276087837011968
+# 优化: https://blog.csdn.net/weixin_42232219/article/details/92115226?utm_medium=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-6.nonecase&depth_1-utm_source=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-6.nonecase
+
+# https://zhuanlan.zhihu.com/p/64019862
+# 画图: https://cloud.tencent.com/developer/article/1388001
+# https://pyecharts.org/#/zh-cn/assets_host
+# https://github.com/shidenggui/easytrader/blob/master/docs/usage.md
+# https://zhuanlan.zhihu.com/c_1189276087837011968
+
 
 ORDER_HISTORY = (
     ('2020-12-20', 9429, 2.014),
