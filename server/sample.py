@@ -1,3 +1,4 @@
+# import pyfolio as pf
 import constant
 import backtrader as bt
 import utils
@@ -5,6 +6,8 @@ import models
 from backtrader_plotting import Bokeh, OptBrowser
 from backtrader_plotting.schemes import Tradimo
 from backtrader.analyzers import SQN
+# import matplotlib.pyplot as plt
+# plt.switch_backend('TkAgg')
 
 import strategys
 
@@ -34,7 +37,7 @@ multiperiod = ''
 #                     _live=utils.true, multiperiod=multiperiod, orderlog=utils.false, tradelog=utils.true, doprint=utils.true)
 cerebro.addstrategy(strategys.SchedStrategy,
                     multiperiod=multiperiod, doprint=utils.true, orderlog=utils.false, tradelog=utils.true)
-start = '2017-06-22'
+start = '2019-06-22'
 end = '2020-06-22'
 
 # df = utils.get_database_data(code, start)
@@ -99,6 +102,21 @@ strat = strats[0]
 #     availablevalue=data['availablevalue'],
 #     totalvalue=data['totalvalue'],
 # )
+# pyfoliozer = strat.analyzers.getbyname('pyfolio',)
+
+# returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
+# print(returns)
+# print(positions)
+# print(transactions)
+# print(gross_lev)
+# pf.create_full_tear_sheet(
+#     returns,
+#     positions=positions,
+#     transactions=transactions,
+#     live_start_date='2019-07-22',
+#     # gross_lev=gross_lev,
+#     # round_trips=True
+#     )
 
 print('Final Portfolio Value: %.3f' % cerebro.broker.getvalue())
 cerebro.plot(style='candle')  # line,bar,candle

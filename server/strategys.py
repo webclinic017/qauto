@@ -1684,18 +1684,19 @@ class SchedStrategy(BaseStrategy):
                 dones.append(datalen)
                 self.hasdones.update({code: dones})
 
-            # datadt = self.data.num2date(data.datetime[0])
+            datadt = self.data.num2date(data.datetime[0])
             momosc = self.momosc[code]
             pricerise = momosc[0]
 
             # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
 
             # 盘中检查
-            if pricerise < self.p.minrise:
+            if pricerise < self.p.minrise or datadt.weekday() == 4:
                 # 检查今日是否已购买
                 tradesize = self.get_trade_size(pricerise, 'buy')
                 self.order = self.buy(data, size=tradesize)
-            elif pricerise > self.p.maxrise:
+
+            if pricerise > self.p.maxrise:
                 tradesize = self.get_trade_size(pricerise, 'sell')
                 self.order = self.sell(data, size=tradesize)
 

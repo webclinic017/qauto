@@ -148,15 +148,15 @@ if __name__ == '__main__':
     print(ret)
     # time.sleep(10)
     uc.prepare
-    ret = uc.auto_ipo
+    # ret = uc.auto_ipo
     # print(ret)
-    # extras = dict(
-    #     code='159928',
-    #     code_cn='消费ETF',
-    #     price=4.012,
-    #     size=100,
-    #     money=1000,
-    # )
+    extras = dict(
+        code='159928',
+        code_cn='消费ETF',
+        price=4.012,
+        size=100,
+        money=1000,
+    )
     # # ret = uc.trade(extras=extras, action='buy')
-    # ret = uc.trade(extras=extras, action='checkrt')
-    # print(ret)
+    ret = uc.trade(extras=extras, action='checkrt')
+    print(ret)

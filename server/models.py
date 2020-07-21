@@ -103,7 +103,7 @@ class DB(object):
         if ret:
             ret = [j[0] for j in ret]
             return ret[0]
-        return []
+        return 0
 
     def select_distinct(self, dbname, pk, wheres=None):
         sql = "SELECT distinct({}) FROM {}".format(pk, dbname)

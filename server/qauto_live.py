@@ -66,6 +66,8 @@ def start_strategy(strategy, code, code_cn, live=utils.false):
 
 def run_strategy(fund, live):
     # 消费特殊处理,cmi值一直偏高
+    if isinstance(fund, str):
+        return
     code = fund['code']
     code_cn = fund['code_cn']
     strategy = strategys.CMIStrategy
@@ -77,12 +79,18 @@ def run_strategy(fund, live):
 
 
 def one_run_strategy(fund, db=None, dbname='', live=utils.true):
-    code = fund['code']
+    if isinstance(fund, dict):
+        code = fund['code']
+    elif isinstance(fund, str):
+        code = fund
+    else:
+        raise Exception('获取code失败')
+    isempty = utils.true
     isempty = utils.update_k_5min_data(
         code, db=db, dbname=dbname, live=live, init=utils.false)
+    _dbname = 'k_data'
     if live:
         # 检查k_data是否已更新
-        _dbname = 'k_data'
         file = utils.get_csv_file(code, _dbname)
         isupdate = utils.false
         if utils.os.path.exists(file):
@@ -95,7 +103,17 @@ def one_run_strategy(fund, db=None, dbname='', live=utils.true):
             utils.update_k_data(
                 code, db=db, dbname=_dbname, live=live, init=utils.false
             )
-    if 1:
+    else:
+        wheres = [
+            {'k': 'code', 'v': code}
+        ]
+        count = db.select_count(_dbname, wheres)
+        if count == 0:
+            utils.update_k_data(
+                code, db=db, dbname=_dbname, live=live, init=utils.true
+            )
+
+    if not isempty:
         run_strategy(fund, live)
 
 
@@ -131,13 +149,18 @@ def tornado_update_k_data(fund, db=None, dbname='', live=utils.true):
     )
 
 
-async def asyncio_run_strategy(fund, db=None, dbname='', live=utils.true):
-    code = fund['code']
+async def asyncio_run_strategy(fund, db=None, dbname='', live=utils.true, init=False):
+    if isinstance(fund, dict):
+        code = fund['code']
+    elif isinstance(fund, str):
+        code = fund
+    else:
+        raise Exception('获取code失败')
     isempty = utils.update_k_5min_data(
-        code, db=db, dbname=dbname, live=live, init=utils.false)
+        code, db=db, dbname=dbname, live=live, init=init)
+    _dbname = 'k_data'
     if live:
         # 检查k_data是否已更新
-        _dbname = 'k_data'
         file = utils.get_csv_file(code, _dbname)
         isupdate = utils.false
         if utils.os.path.exists(file):
@@ -150,6 +173,16 @@ async def asyncio_run_strategy(fund, db=None, dbname='', live=utils.true):
             utils.update_k_data(
                 code, db=db, dbname=_dbname, live=live, init=utils.false
             )
+    else:
+        wheres = [
+            {'k': 'code', 'v': code}
+        ]
+        count = db.select_count(_dbname, wheres)
+        if count == 0 or init:
+            utils.update_k_data(
+                code, db=db, dbname=_dbname, live=live, init=utils.true
+            )
+
     if not isempty:
         run_strategy(fund, live)
 
@@ -163,16 +196,20 @@ async def asyncio_update_k_data(fund, db=None, dbname='', live=utils.true):
 
 # %%
 if __name__ == "__main__":
-    funds = constant.live_trade_funds
+    # funds = constant.live_trade_funds
     db = models.DB()
+    wheres = [
+        {'k': 'qtype', 'v': 'lof'}
+    ]
+    funds = utils.get_distinct_codes('fund_info', pk='code', wheres=wheres)
     live = utils.true
     dbname = 'k_5min_data'
     # dbname = 'k_data'
     # for fund in funds:
     #     # tornado_run_strategy(fund, db, dbname, live)
-    #     one_run_strategy(fund, db, dbname, live)
+    #     one_run_strategy(fund, db, dbname, utils.false)
 
     # utils.tornado_tasks(tornado_run_strategy, tasks=funds, db=db, dbname=dbname, live=live)
 
     utils.asyncio_tasks(asyncio_run_strategy, tasks=funds,
-                        db=db, dbname=dbname, live=live)
+                        db=db, dbname=dbname, live=utils.false, init=utils.true)

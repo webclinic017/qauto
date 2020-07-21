@@ -12,6 +12,8 @@ import models
 # https://cn.tradingview.com/scripts/truestrengthindicator/
 # https://www.jianshu.com/p/bbee17ba168a
 
+# 配对交易: https://www.cnblogs.com/ManWingloeng/p/12541244.html
+
 # ACCDIST(df,n)：积累/分配（Accumulation/Distribution）。
 # ADX(df,n,n_ADX)：定向运动平均指数（Average Directional Movement Index）。
 # ATR(df,n)：平均真实范围（Average True Range）。

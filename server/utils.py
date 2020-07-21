@@ -17,16 +17,12 @@ import pyecharts.options as opts
 from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
 from pyecharts import options as opts
 from pyecharts.charts import Kline, Bar, Line, EffectScatter, Grid, Scatter
-# import talib as ta
 import pandas as pd
 import tushare as ts
 # import akshare as ak
 import backtrader as bt
 from bs4 import BeautifulSoup as bs
 import requests
-# import gevent
-# from gevent.pool import Pool
-# import gevent.monkey
 from sklearn import svm
 import numpy as np
 from analyzers import AccountValue
@@ -56,8 +52,6 @@ for fdir in dirs:
         os.makedirs(fdir)
 
 global_config = {}
-
-# gevent.monkey.patch_all(select=false)
 
 # %%
 # https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
@@ -203,18 +197,24 @@ def addanalyzer(cerebro):
     # order记录
     # analyzers.transactions.get_analysis()
     cerebro.addanalyzer(bt.analyzers.Transactions, _name="transactions")
+    # cerebro.addanalyzer(bt.analyzers.PyFolio, _name='pyfolio')
 
 
 # %%
 # 获取所有场内基金
 
 
-def get_all_etf():
+def get_all_etf(_type=''):
     url = 'https://www.joinquant.com/help/api/getContent?name=fund'
     res = requests.get(url)
     data = res.json().get('data', '')
     soup = bs(data, 'lxml')
-    items = soup.find_all('tbody')[4: 6]
+    if not _type:
+        items = soup.find_all('tbody')[4: 6]
+    elif _type == 'etf':
+        items = soup.find_all('tbody')[4:5]
+    elif _type == 'lof':
+        items = soup.find_all('tbody')[5:6]
     codes = []
     for x in items:
         for y in x.find_all('tr'):
@@ -638,12 +638,13 @@ def _get_query_str(querystr, k, v, op):
 
 
 def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type='fund', live=false, init=false):
-    print('start...{}, dbname...{}, date...{}'.format(code, dbname, start))
+    print('start...,{}, dbname...{}, date...{}'.format(code, dbname, start))
     code = get_code_string(code)
     df = get_ts_data(code, start=start, end=end, _type=_type, freq=freq)
+    isempty = true
     if df.empty:
         print('{0},未获得数据'.format(code))
-        return true
+        return isempty
     # 时区设置不一致
     df['timestamp'] = df['datetime'].apply(
         lambda x: int(x.timestamp()) - 8*60*60,
@@ -658,7 +659,6 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
             pandas_save(da, file)
             return false
 
-        isempty = true
         if not os.path.exists(file):
             update_one_code(code, start='', db=db, dbname=dbname,
                             _type=_type, freq=freq, live=live, init=true)
@@ -692,12 +692,18 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
     if init:
         print('初始化 {} {}'.format(code, dbname))
         db.delete(dbname, wheres)
+        isempty = db.insert(df, dbname)
+        return false
+
     count = db.select_count(dbname, wheres=wheres)
     if count > 0:
         pks = ['timestamp', 'code', 'type']
         isempty = db.insert(df, dbname, pks)
     else:
-        isempty = db.insert(df, dbname)
+        update_one_code(code, start='', db=db, dbname=dbname,
+                        _type=_type, freq=freq, live=live, init=true)
+        isempty = false
+
     return isempty
 
 
@@ -727,6 +733,26 @@ def update_k_data(code, start='', db=None, dbname='k_data', live=false, init=fal
     freq = 'D'
     update_one_code(code, start=start, db=db,
                     dbname=dbname, freq=freq, live=live, init=init)
+
+
+def _update_fund_info(code, db=None, dbname='fund_info', qtype='lof'):
+    df = ts.get_fund_info(code)
+    df.insert(0, 'code', code)
+    df.insert(1, 'code_cn', '')
+    df.insert(2, 'qtype', qtype)
+    pks = ['code', 'glr']
+    db.insert(df, dbname=dbname, pks=pks)
+
+
+def update_fund_info():
+    db = models.DB()
+    # qtypes = ['etf', 'lotf']
+    qtypes = ['lof']
+    for qtype in qtypes:
+        codes = get_all_etf(_type=qtype)
+        asyncio_tasks(_update_fund_info, codes, db=db, qtype=qtype)
+        # for code in codes:
+        #     _update_fund_info(code, db=db, qtype=qtype)
 
 
 def update_future():
@@ -847,16 +873,6 @@ def is_trade_day(day=None):
     return istradeday
 
 # %%
-
-
-def asyncgreelet_tasks(func, tasks, *args, **kw):
-    pool = Pool(size=16)
-    greenlets = []
-    for task in tasks:
-        greenlets.append(
-            pool.spawn(func, task, *args, **kw)
-        )
-    gevent.joinall(greenlets)
 
 
 def asyncio_tasks(func, tasks, *args, **kw):
@@ -1047,11 +1063,6 @@ def check_and_delete_record():
             db.delete(dbname, wheres=wheres2)
 
 
-def bar_size(df, fromdate, todate):
-    return len(df[(df['date'] >= fromdate.strftime('%Y-%m-%d'))
-                  & (df['date'] <= todate.strftime('%Y-%m-%d'))])
-
-
 def print_transaction(strat):
     transacions = strat.analyzers.transactions.get_analysis()
     for x, y in transacions.items():
@@ -1102,4 +1113,6 @@ def check_order():
 if __name__ == "__main__":
     pass
     # get_all_futures()
-    check_order()
+    # check_order()
+    update_fund_info()
+    # import ipdb; ipdb.set_trace()

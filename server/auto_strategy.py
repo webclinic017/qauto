@@ -284,7 +284,7 @@ def start_one(code, optparams, strategy, _type):
 
     dates = get_dates(db, dbname, field)
 
-    # auto_run_strategy(code, dates, strategy, optparams, pks, _type)
+    auto_run_strategy(code, dates, strategy, optparams, pks, _type)
 
     oneparams = get_one_params(
         db, dbname, code, dates, strategy, optparams)
@@ -315,21 +315,20 @@ def start(codes, optparams, strategy, _type='fund'):
 
 
 def main():
-    # optparams = [
-    #     {'k': 'maxrise', 'v': [2.25, 2.5, 2.75, 3.25]},
-    #     {'k': 'minrise', 'v': [-0.25, -0.75, -0.95]},
-    #     {'k': 'perrise', 'v': [0.25, 0.75]},
-    #     {'k': 'petype', 'v': ''},
-    # ]
-    # strategy = SchedStrategy
-
     optparams = [
-        {'k': 'twapperiod', 'v': [3, 5]},
+        {'k': 'maxrise', 'v': 2.5},
+        {'k': 'minrise', 'v': [0.25, -0.25, -0.75]},
+        {'k': 'perrise', 'v': 0.25},
     ]
-    strategy = strategys.TWAPMultiStrategy
+    strategy = strategys.SchedStrategy
+
+    # optparams = [
+    #     {'k': 'twapperiod', 'v': [3, 5]},
+    # ]
+    # strategy = strategys.TWAPMultiStrategy
 
     import constant
-    codes = [i for i, _ in constant.trade_funds.items()]
+    codes = [i['code'] for i in constant.trade_funds]
 
     # allcodes = []
     # for y in itertools.combinations(codes, 4):
@@ -372,7 +371,7 @@ def main():
 # opt-pools
 
 
-# select a.code, a.start, a.minperiod,a.maxperiod,b.twapperiod, a.rate, a.slgrate as cslgrate, b.slgrate as tslgrate, a.mddrate as cmddrate, b.mddrate as tmddrate from cmistrategy as a, twapmultistrategy as b where a.code=b.code and a.start=b.start and twapperiod=3 and minperiod=20 
+# select a.code, a.start, a.minperiod,a.maxperiod,b.twapperiod, a.rate, a.slgrate as cslgrate, b.slgrate as tslgrate, a.mddrate as cmddrate, b.mddrate as tmddrate from cmistrategy as a, twapmultistrategy as b where a.code=b.code and a.start=b.start and twapperiod=3 and minperiod=20
 
 if __name__ == "__main__":
     main()
