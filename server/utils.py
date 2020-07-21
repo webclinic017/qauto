@@ -51,7 +51,7 @@ for fdir in dirs:
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
-global_config = {}
+g_share = {}
 
 # %%
 # https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
@@ -817,7 +817,7 @@ def back_up():
 
 def get_trade_days():
     pro = ts.pro_api()
-    tradedays = global_config.get('tradedays', [])
+    tradedays = g_share.get('tradedays', [])
     if not tradedays:
         now = datetime.now()
         now = now + timedelta(days=-365*10)
@@ -825,7 +825,7 @@ def get_trade_days():
         data = pro.query('trade_cal', start_date=start_date, is_open='1')
         # exchange默认为上交所,start_date和end_date不是必填,is_open不填是全部,is_open可以使用0和1,0为不交易的日期,1为交易日
         tradedays = data['cal_date'].to_list()
-        global_config['tradedays'] = tradedays
+        g_share['tradedays'] = tradedays
     return tradedays
 
 
@@ -876,15 +876,17 @@ def is_trade_day(day=None):
 
 
 def asyncio_tasks(func, tasks, *args, **kw):
-    if 'loop' in locals():
-        loop = asyncio.get_event_loop()
-    else:
+    if not g_share.get('loop', None):
+        # 设置一个主loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        g_share['loop'] = loop
+    # loop = asyncio.get_event_loop()
+    loop = g_share['loop']
     coroutines = [func(task, *args, **kw) for task in tasks]
     wait_coroutines = asyncio.wait(coroutines)
     loop.run_until_complete(wait_coroutines)
-    loop.close()
+    # loop.close()
 
 
 @gen.coroutine

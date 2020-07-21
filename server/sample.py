@@ -1,4 +1,3 @@
-# import pyfolio as pf
 import constant
 import backtrader as bt
 import utils
@@ -28,8 +27,8 @@ cerebro.add_order_history(ORDER_HISTORY, notify=utils.true)
 # self.stats.trades[0] # 当前持仓盈亏
 
 # 多周期回测
-# multiperiod = 'k_5min_data'
-multiperiod = ''
+multiperiod = 'k_5min_data'
+# multiperiod = ''
 
 # 159928,单纯twap表现优秀,cmi表现不佳???,cmi取值有问题???
 # 162703,twap表现远不如cmi,round长期持有???
@@ -102,21 +101,6 @@ strat = strats[0]
 #     availablevalue=data['availablevalue'],
 #     totalvalue=data['totalvalue'],
 # )
-# pyfoliozer = strat.analyzers.getbyname('pyfolio',)
-
-# returns, positions, transactions, gross_lev = pyfoliozer.get_pf_items()
-# print(returns)
-# print(positions)
-# print(transactions)
-# print(gross_lev)
-# pf.create_full_tear_sheet(
-#     returns,
-#     positions=positions,
-#     transactions=transactions,
-#     live_start_date='2019-07-22',
-#     # gross_lev=gross_lev,
-#     # round_trips=True
-#     )
 
 print('Final Portfolio Value: %.3f' % cerebro.broker.getvalue())
 cerebro.plot(style='candle')  # line,bar,candle

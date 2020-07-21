@@ -99,7 +99,7 @@ flow.checkRT = function (fun) {
 };
 
 flow.autoIpo = function (fun) {
-    var storage_app = common.storageApp();
+    var storage_rt = flow.common.storageRT();
     var date = common.date();
     var user_nos = common.user_nos;
     for (var j = 0; j < 2; j++) {
@@ -116,7 +116,7 @@ flow.autoIpo = function (fun) {
                 if (user_no == user_nos[j]) {
                     var key = "{0}:{1}".format(user_no, date);
                     common.toastLog(user_no);
-                    var hasipo = storage_app.get(key, false);
+                    var hasipo = storage_rt.get(key, false);
                     if (!hasipo) {
                         // user.click();
                         click(user_no);
@@ -130,10 +130,10 @@ flow.autoIpo = function (fun) {
                                 key = "{0}:{1}".format(user_nos[0], date);
                             }
                             common.toastLog(key);
-                            storage_app.put(key, true);
+                            storage_rt.put(key, true);
                             return;
                         }
-                        storage_app.put(key, true);
+                        storage_rt.put(key, true);
                     } else {
                         var msg = "{0}:已打新".format(user_no);
                         common.toastLog(msg);

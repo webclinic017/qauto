@@ -1651,8 +1651,8 @@ class SchedStrategy(BaseStrategy):
     params = dict(
         printlog=utils.false,
         petype='',  # 市盈率类型,pe,pe_ttm,pb,''
-        perrise=0.75,
-        minrise=-0.25,
+        perrise=0.25,
+        minrise=0.25,
         maxrise=2.5,
         buysize=100,
         sellsize=100,
@@ -1669,7 +1669,7 @@ class SchedStrategy(BaseStrategy):
     def next(self):
         if self.p.optpass:
             return
-        for data in self.datas:
+        for i, data in enumerate(self.datas):
             code = utils.get_code_string(data.code[0])
 
             if self.p.multiperiod:
@@ -1685,20 +1685,26 @@ class SchedStrategy(BaseStrategy):
                 self.hasdones.update({code: dones})
 
             datadt = self.data.num2date(data.datetime[0])
+            mdata = self.datas[i+1]
+            mdatadt = self.data.num2date(mdata.datetime[-3])
             momosc = self.momosc[code]
             pricerise = momosc[0]
+
+            intradetime = mdatadt.hour == 14 and mdatadt.minute == 45
+            # 构造当天数据,14:45时,根据此时收盘价进行判断
 
             # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
 
             # 盘中检查
-            if pricerise < self.p.minrise or datadt.weekday() == 4:
+            if (pricerise < self.p.minrise or datadt.weekday() == 4) and intradetime:
+            # if (pricerise < self.p.minrise or datadt.weekday() == 4):
                 # 检查今日是否已购买
                 tradesize = self.get_trade_size(pricerise, 'buy')
-                self.order = self.buy(data, size=tradesize)
+                self.order = self.buy(mdata, size=tradesize)
 
-            if pricerise > self.p.maxrise:
+            if pricerise > self.p.maxrise and intradetime:
                 tradesize = self.get_trade_size(pricerise, 'sell')
-                self.order = self.sell(data, size=tradesize)
+                self.order = self.sell(mdata, size=tradesize)
 
             # if self.bband.bot[0] > self.data.close[0]:
             #     tradesize = self.get_trade_size(pricerise, 'buy')

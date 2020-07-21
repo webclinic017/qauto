@@ -17,6 +17,7 @@ var config = {
 flow.init({
     app_name: "华宝智投",
     package_name: "com.hwabao.hbstockwarning",
+    tip_texts: ["暂不更新"],
     config: config,
 });
 
@@ -681,23 +682,25 @@ flow.run({
         flow.jumpToTrade(fun, item);
         click("新股/新债申购");
         flow.common.sleep(3);
-        var count_ele = textStartsWith("待预约").findOnce();
-        var count_text = count_ele.text();
-        var count = parseInt(count_text.slice(3, count_text.length - 3));
-        var num = 0;
+
+        var select_ele = idEndsWith("cb_all_select").findOnce();
+        var select_text = select_ele.text();
+        var count = parseInt(select_text.slice(3, select_text.length - 1));
         if (count > 0) {
-            click("一键预约");
+            click("全选");
             flow.common.sleep(1);
-            var num_ele = idEndsWith("tv_quick_numtitle").findOnce();
-            var num_str = num_ele.text().replace(/[^0-9]/gi, "");
-            num = parseInt(num_str);
-            click("一键预约");
+            click("一键申购");
             flow.common.sleep(3);
-            var dismiss_ele = idEndsWith("dismiss").findOnce();
-            if (dismiss_ele) {
-                dismiss_ele.click();
+            var confirm_ele = textContains("申购确认").findOnce();
+            if (confirm_ele) {
+                click("确定");
+                flow.common.sleep(1);
+                click("我知道了");
+                flow.common.sleep(1);
             }
+            back();
         }
+
         var storage_rt = flow.common.storageRT();
         var date = flow.common.date();
         storage_rt.put("{0}:{1}".format(user_no, date), true);
@@ -705,7 +708,7 @@ flow.run({
         flow.common.sleep(1);
         back();
         flow.common.sleep(1);
-        return num;
+        return count;
     },
     apply: function (fun, data) {
         var msg = "{0},申购 {1} 元".format(data.code, data.money);
