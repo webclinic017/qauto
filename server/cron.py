@@ -85,13 +85,13 @@ def update_k_5min_data_cron():
     now = datetime.now()
     print(now)
     istradeday = utils.is_trade_day(now)
-    if not istradeday:
-        print('非交易日')
-        return
-
     broker = 'hb'
     uc = remoteclient.get_remote_client(broker)
-    print(uc)
+    if not istradeday:
+        print('非交易日')
+        uc.lock
+        return
+
     # 交易基金(定投策略),twap策略,cmi策略
     funds = constant.live_trade_funds
     if (11 >= now.hour >= 9) or (15 >= now.hour >= 13):
@@ -127,7 +127,7 @@ def update_k_data_cron():
     db = models.DB()
     dbname = 'k_data'
     utils.asyncio_tasks(
-        qauto_live.asyncio_run_strategy,
+        qauto_live.asyncio_update_k_data,
         tasks=funds,
         db=db,
         dbname=dbname,
@@ -165,7 +165,7 @@ def start():
     scheduler.add_job(update_k_5min_data_cron,
                       trigger=trigger, max_instances=1)
 
-    trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=21, minute=10)
+    trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=22, minute=40)
     scheduler.add_job(update_k_data_cron, trigger=trigger)
     scheduler.start()
     scheduler.print_jobs()

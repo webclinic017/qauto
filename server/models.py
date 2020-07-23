@@ -46,7 +46,7 @@ class DB(object):
     def upsert(self, data, dbname, sets=None, wheres=None):
         if sets and wheres:
             df = self.select(dbname, wheres=wheres)
-            if df.empty:
+            if df.empty and data:
                 self.insert(data, dbname)
             else:
                 _set = self.get_where_or_set(sets)
@@ -54,7 +54,7 @@ class DB(object):
                 sql = 'UPDATE {0} set {1} where {2}'.format(
                     dbname, _set, where)
                 ret = self.execute(sql)
-                print(ret)
+                # print(ret)
         else:
             self.insert(data, dbname)
 
@@ -218,7 +218,7 @@ class DB(object):
 
 
 class KDATA(DB):
-    def select_data(self, dbname, fields=[], wheres=None, orderby=None, live=False):
+    def select_data(self, dbname, fields=[], wheres=None, orderby=None, slg='', live=False):
         if live:
             code = wheres[0]['v']
             file = utils.get_csv_file(code, dbname)
@@ -232,6 +232,30 @@ class KDATA(DB):
                                inplace=utils.true)
 
             df.datetime = df.datetime.astype('datetime64')
+            if dbname == 'k_data' and slg == 'sched':
+                file = utils.get_csv_file(code, 'k_5min_data')
+                da5min = pd.read_csv(file)
+                date = utils.get_datetime_date(flag='-')
+                wheres[1]['v'] = date
+                querystr = utils.get_query_str(wheres)
+                df5min = da5min.query(querystr)
+                todaydata = dict(
+                    code=df5min.code.values[0],
+                    open=df5min.open.values[0],
+                    close=df5min.close.values[-1],
+                    high=df5min.high.max(),
+                    low=df5min.low.min(),
+                    volume=df5min.volume.sum(),
+                    amount=df5min.amount.sum(),
+                    p_change=df.close.values[-1] - df5min.close.values[-1],
+                    datetime=pd.Timestamp(date),
+                    type='fund',
+                    createdtime=0,
+                    timestamp=0,
+                )
+                row = pd.Series(todaydata)
+                df = df.append(row, ignore_index=True)
+
             return df
         else:
             print('数据库加载...', dbname)

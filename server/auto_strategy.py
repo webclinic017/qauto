@@ -93,24 +93,26 @@ def run_strategy(code, start='', end='', strategy=None, params={}, isopt=True, c
             data = models.PandasData(dataname=df)
             cerebro.adddata(data)
     else:
-        params['code'] = code
-        df = utils.get_database_data(code, start, end)
-        if df.empty:
-            print('未取到数据')
-            return
-        data = models.PandasData(dataname=df)
-        cerebro.adddata(data)
+        # params['code'] = code
+        # df = utils.get_database_data(code, start, end)
+        # if df.empty:
+        #     print('未取到数据')
+        #     return
+        # data = models.PandasData(dataname=df)
+        # cerebro.adddata(data)
 
-        # dbnames = ['k_data', 'k_5min_data']
-        # for dbname in dbnames:
-        #     df = utils.get_database_data(
-        #         code, dbname=dbname, start=start, end=end)
-        #     if df.empty:
-        #         print(code, '未获取到数据')
-        #         continue
-        #     name = '{}:{}'.format(code, dbname)
-        #     data = models.PandasData(dataname=df, name=name)
-        #     cerebro.adddata(data)
+        dbnames = ['k_data', 'k_5min_data']
+        params['multiperiod'] = 'k_5min_data'
+        for dbname in dbnames:
+            df = utils.get_database_data(
+                code, dbname=dbname, start=start, end=end)
+            if df.empty:
+                print(code, '未获取到数据')
+                continue
+            # print(df)
+            name = '{}:{}'.format(code, dbname)
+            data = models.PandasData(dataname=df, name=name)
+            cerebro.adddata(data)
 
     cerebro.broker.setcash(startcash)
     cerebro.broker.setcommission(commission=comm)
@@ -170,7 +172,7 @@ def get_dates(db, dbname, pk):
 
     dates = []
     now = datetime.now()
-    for _ in range(21):
+    for _ in range(6):
         now += timedelta(days=-182)
         date = utils.get_datetime_date(now)
         dates.append(date)

@@ -29,7 +29,10 @@ class RemoteClient:
         args = self.gen_args()
         endpoint = sys._getframe().f_code.co_name
         url = '{}/{}?{}'.format(self._api, endpoint, args)
-        res = self._s.get(url)
+        try:
+            res = self._s.get(url)
+        except:
+            return {}
         return res.json()
 
     @property

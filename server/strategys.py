@@ -37,6 +37,7 @@ class BaseStrategy(bt.Strategy):
         tradestrats={},
         orderstrats={},
         multiperiod='',  # 开启多周期回测
+        weightflag='one',  # 默认不加仓,或平均分配,add,ave
 
         pks='',  # 以下为优化参数使用
         db=None,
@@ -202,15 +203,14 @@ class BaseStrategy(bt.Strategy):
             action = 'sell'
             title = '卖出提示'
         datadt = self.data.num2date(order.data.datetime[0])
-        date = utils.get_datetime_date(datadt, flag='-')
-        nowdate = utils.get_datetime_date(flag='-')
-        datadate = utils.get_datetime_date(datadt, flag='-')
+        nowdate = datetime.now().date()
+        datadate = datadt.date()
         text = '{}:{}:{}:{}:{}'.format(datadt, code, code_cn, size, price)
-        print(title, text)
+        # print(title, text)
         value = utils.get_float(price * size)
         tp = int(datadt.timestamp())
         data = dict(
-            date=date,
+            date=datadate,
             broker='hte',
             code=code,
             code_cn=code_cn,
@@ -230,23 +230,26 @@ class BaseStrategy(bt.Strategy):
         if nowdate == datadate:
             utils.notify_to_wx(title, text)
 
-    def get_weight(self, datas, add=utils.false):
+    def get_weight(self, datas, weightflag='one'):
         weight = []
         datalen = len(datas)
-        if not add:
+        if weightflag == 'one':
             if datalen >= 3:
                 weight = [0.5, 0.3, 0.15]
             elif datalen == 2:
                 weight = [0.6, 0.35]
             else:
                 weight = [0.95]
-        else:
+        elif weightflag == 'add':
             if datalen >= 3:
                 weight = [0.15, 0.1, 0.05]
             elif datalen == 2:
                 weight = [0.1, 0.05]
             else:
                 weight = [0.2]
+        elif weightflag == 'ave':
+            one = 0.95 / datalen
+            weight = [one for x in range(datalen)]
         return weight
 
     def notify_trade(self, trade):
@@ -308,13 +311,13 @@ class BaseStrategy(bt.Strategy):
         return transaction
 
     def is_trade_done(self, datadt, code):
-        datadate = utils.get_datetime_date(datadt, flag='-')
+        datadate = datadt.date()
         istradedone = utils.false
         for x, y in self.analyzers.transactions.get_analysis().items():
             tcode = y[0][3].split(':')[0]
             if tcode != code:
                 continue
-            xdate = utils.get_datetime_date(x, flag='-')
+            xdate = x.date()
             if xdate == datadate:
                 istradedone = utils.true
                 break
@@ -332,7 +335,7 @@ class BaseStrategy(bt.Strategy):
                 continue
             tradelst.append(trade)
 
-        self.weight = self.get_weight(tradelst, add=self.p.add)
+        self.weight = self.get_weight(tradelst, weightflag=self.p.weightflag)
         # 获取权重及次序
         tradelst = sorted(tradelst, key=lambda x: x['mom'], reverse=utils.true)
         for i, trade in enumerate(tradelst):
@@ -536,7 +539,7 @@ class BaseStrategy(bt.Strategy):
                 if pos and pos.size > 0:
                     msg = '{}, 日期: {}, 持仓:{}, 成本价:{:.3f}, 当前价:{:.3f}, 盈亏:{:.3f}, 总市值:{:.3f}'.format(
                         code,
-                        utils.get_datetime_date(pos.datetime, flag='-'),
+                        pos.datetime,
                         pos.size,
                         pos.price,
                         pos.adjbase,
@@ -750,7 +753,7 @@ class TWAPStrategy(BaseStrategy):
                     tradelst.append(tradedict)
 
         # 确定次序
-        self.weight = self.get_weight(tradelst)
+        self.weight = self.get_weight(tradelst, weightflag='one')
         # 获取权重及次序
         tradelst = sorted(tradelst, key=lambda x: x['mom'], reverse=utils.true)
         for i, trade in enumerate(tradelst[:2]):
@@ -790,7 +793,7 @@ class MtmStrategy(BaseStrategy):
         mtmperiod=3,  # mtm选择短周期,3更灵敏, [3,6]
         mamtmperiod=21,  # mamtm指标选择长周期
         momperiod=13,  # mamtm指标选择长周期
-        add=utils.true,  # 是否分批加仓
+        weightflag='add',  # 是否分批加仓
     )
 
     def __init__(self, inds=[]):
@@ -826,7 +829,7 @@ class MtmStrategy(BaseStrategy):
                     tradelst.append(tradedict)
                     self.buytimes[code] = 1
 
-            if self.p.add:
+            if self.p.weightflag == 'add':
                 if (atr[0] >= atr[-1]) and haspos:
                     # 分批进仓时加仓,已持仓,本日真实价格波动均值大于昨日
                     # 效果不好???
@@ -859,7 +862,7 @@ class MtmStrategy(BaseStrategy):
                     self.buytimes[code] = 0
 
         tradelst = sorted(tradelst, key=lambda x: x['mom'], reverse=utils.true)
-        self.weight = self.get_weight(tradelst, add=self.p.add)
+        self.weight = self.get_weight(tradelst, weightflag=self.p.weightflag)
         percent = 0.95
         for i, trade in enumerate(tradelst[:2]):
             code = trade['code']
@@ -926,7 +929,7 @@ class RoundStrategy(BaseStrategy):
             buyitems.append((code, ))
         codes = [i[0] for i in buyitems[:2]]
         # 根据买入数量确认权重
-        self.weight = self.get_weight(codes)
+        self.weight = self.get_weight(codes, weightflag='ave')
         trades = {}
         # 设置权重
         for i, code in enumerate(codes):
@@ -958,7 +961,7 @@ class RoundStrategy(BaseStrategy):
         # 动量不足,持有债券,根据权重1
         if not needbuys:
             needbuys.append(moms[-1])
-        weight = self.get_weight(needbuys)
+        weight = self.get_weight(needbuys, weightflag='ave')
         # 检查卖出
         percent = 1
         for j in moms:
@@ -1010,7 +1013,7 @@ class TWAPMultiStrategy(BaseStrategy):
         momperiod=13,
         smaperiod=16,
         multiperiod='',
-        add=utils.false,  # 是否分批加仓
+        weightflag='one',  # 是否分批加仓
     )
 
     def __init__(self, inds=[]):
@@ -1093,7 +1096,7 @@ class TWAPMultiStrategy(BaseStrategy):
                     tradelst.append(tradedict)
                     self.buytimes[code] = 1
 
-            if self.p.add:
+            if self.p.weightflag == 'add':
                 if (atr[0] >= atr[-1]) and haspos:
                     # 分批进仓时加仓,已持仓,本日真实价格波动均值大于昨日
                     # 效果不好???
@@ -1115,7 +1118,8 @@ class TWAPMultiStrategy(BaseStrategy):
             tradelst = sorted(
                 tradelst, key=lambda x: x['mom'], reverse=utils.true)
 
-            self.weight = self.get_weight(tradelst, add=self.p.add)
+            self.weight = self.get_weight(
+                tradelst, weightflag=self.p.weightflag)
             percent = 0.95
             for i, trade in enumerate(tradelst[:2]):
                 code = trade['code']
@@ -1177,7 +1181,7 @@ class CMIStrategy(BaseStrategy):
         multiperiod='',
 
         orderholdperiod=7,  # 控制订单频率,不接受7天之内的订单
-        add=utils.true,  # 是否分批加仓
+        weightflag='one',  # 是否分批加仓
     )
 
     def __init__(self, inds=[]):
@@ -1248,7 +1252,7 @@ class CMIStrategy(BaseStrategy):
                 if not hasattr(self, key):
                     setattr(self, key, [])
 
-                self.p.add = utils.true
+                self.p.weightflag = 'add'
                 tradedict = self.next_mtm(code, data)
                 # tradedict = self.next_turtle(code, data)
                 # tradedict = self.next_boll(code, data)
@@ -1266,7 +1270,7 @@ class CMIStrategy(BaseStrategy):
                 if not hasattr(self, key):
                     setattr(self, key, [])
 
-                self.p.add = utils.true
+                self.p.weightflag = 'one'
                 tradedict = self.next_twap(code, data)
                 if tradedict.get('flag', ''):
                     tradelst.append(tradedict)
@@ -1276,7 +1280,7 @@ class CMIStrategy(BaseStrategy):
                     self.__dict__[key].append(date)
             elif cmi[0] >= self.p.maxperiod:
                 # 牛市策略,长期持有,不使用加仓策略,价格相对便宜
-                self.p.add = utils.false
+                self.p.weightflag = 'one'
                 key = 'roundst'
                 # print(date, key)
                 if not hasattr(self, key):
@@ -1295,7 +1299,8 @@ class CMIStrategy(BaseStrategy):
             tradelst = sorted(
                 tradelst, key=lambda x: x['mom'], reverse=utils.true)
 
-            self.weight = self.get_weight(tradelst, add=self.p.add)
+            self.weight = self.get_weight(
+                tradelst, weightflag=self.p.weightflag)
             percent = 0.95
             for i, trade in enumerate(tradelst[:2]):
                 code = trade['code']
@@ -1345,7 +1350,7 @@ class CMIStrategy(BaseStrategy):
                 tradedict['flag'] = 'buy'
                 self.buytimes[code] = 1
 
-        if self.p.add:
+        if self.p.weightflag == 'add':
             if (data.close[0] >= 0.5*atr[0]) and haspos:
                 # if (atr[0] >= atr[-1]) and haspos:
                 # 分批进仓时加仓,已持仓,本日真实价格波动均值大于昨日
@@ -1387,7 +1392,7 @@ class CMIStrategy(BaseStrategy):
                 tradedict['flag'] = 'buy'
                 self.buytimes[code] = 1
 
-        if self.p.add:
+        if self.p.weightflag == 'add':
             if (data.close[0] >= 0.5*atr[0]) and haspos:
                 # if (atr[0] >= atr[-1]) and haspos:
                 # 分批进仓时加仓,已持仓,本日真实价格波动均值大于昨日
@@ -1662,17 +1667,49 @@ class SchedStrategy(BaseStrategy):
     )
 
     def __init__(self):
-        self.inds = ['momosc', 'D', 'sma']
+        self.inds = ['momosc', 'D']
         self.hasdones = {}
+        self.pretrades = []
         super(SchedStrategy, self).__init__()
 
     def next(self):
         if self.p.optpass:
             return
-        for i, data in enumerate(self.datas):
+
+        tradelst = []
+        for data in self.datas:
             code = utils.get_code_string(data.code[0])
+            datadt = self.data.num2date(data.datetime[0])
 
             if self.p.multiperiod:
+                pretrades = self.get_pre_trades()
+                trade = pretrades.get(code, {})
+                intradetime = datadt.hour == 14 and datadt.minute == 45
+                # 构造当天数据,14:45时,根据此时收盘价进行判断
+                if intradetime and pretrades and trade:
+                    tdatadt = trade['datetime']
+                    if datadt.date() != tdatadt.date():
+                        # 过滤不是当天订单
+                        continue
+                    now = datetime.now()
+                    if datadt.date() == now.date() and self.p._live:
+                        # 当天订单,且实盘,只处理14:45时间
+                        df = self.getdatabyname(data._name)
+                        last = df.p.dataname.timestamp[-1]
+                        tp = int(datadt.timestamp())
+                        if last != tp:
+                            continue
+                    flag = trade['flag']
+                    size = trade['size']
+                    # print(trade)
+                    if flag == 'buy':
+                        price = data.close[0]
+                        print(datadt, price)
+                        self.order = self.buy(data, size=size)
+                        # self.order = self.buy(data, size=size, price=price, exectype=bt.Order.Limit)
+                    else:
+                        self.order = self.sell(data, size=size)
+                    continue
                 # 过滤5分钟k线
                 if self.p.multiperiod in data._name:
                     continue
@@ -1684,27 +1721,44 @@ class SchedStrategy(BaseStrategy):
                 dones.append(datalen)
                 self.hasdones.update({code: dones})
 
-            datadt = self.data.num2date(data.datetime[0])
-            mdata = self.datas[i+1]
-            mdatadt = self.data.num2date(mdata.datetime[-3])
             momosc = self.momosc[code]
             pricerise = momosc[0]
-
-            intradetime = mdatadt.hour == 14 and mdatadt.minute == 45
-            # 构造当天数据,14:45时,根据此时收盘价进行判断
+            tradedict = dict(
+                data=data,
+                code=code,
+                mom=pricerise,
+                datetime=datadt,
+            )
 
             # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
 
             # 盘中检查
-            if (pricerise < self.p.minrise or datadt.weekday() == 4) and intradetime:
-            # if (pricerise < self.p.minrise or datadt.weekday() == 4):
+            if (pricerise < self.p.minrise or datadt.weekday() == 4):
                 # 检查今日是否已购买
                 tradesize = self.get_trade_size(pricerise, 'buy')
-                self.order = self.buy(mdata, size=tradesize)
+                tradedict['flag'] = 'buy'
+                tradedict['size'] = tradesize
+                tradelst.append(tradedict)
+                # import ipdb; ipdb.set_trace()
 
-            if pricerise > self.p.maxrise and intradetime:
+            if pricerise > self.p.maxrise:
                 tradesize = self.get_trade_size(pricerise, 'sell')
-                self.order = self.sell(mdata, size=tradesize)
+                tradedict['flag'] = 'sell'
+                tradedict['size'] = tradesize
+                tradelst.append(tradedict)
+
+        if self.p.multiperiod:
+            # 确定次序
+            for trade in tradelst:
+                self.pretrades.append(trade)
+        else:
+            for trade in tradelst:
+                flag = trade['flag']
+                size = trade['size']
+                if flag == 'buy':
+                    self.order = self.buy(data, size=size)
+                else:
+                    self.order = self.sell(data, size=size)
 
             # if self.bband.bot[0] > self.data.close[0]:
             #     tradesize = self.get_trade_size(pricerise, 'buy')
@@ -1748,6 +1802,8 @@ class SchedStrategy(BaseStrategy):
     def get_trade_size(self, pricerise, flag):
         # 根据大盘上证综指PETTM估值判断
         # PE估值近期对159928影响小
+        if flag == 'buy' and pricerise > 0:
+            return 100
         petimes = self.get_pe_times(flag)
         # 大跌大买,小跌小买
         # 大涨大卖,小涨小卖

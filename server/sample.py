@@ -48,7 +48,7 @@ multiperiod = 'k_5min_data'
 #                     _live=utils.true, multiperiod=multiperiod, orderlog=utils.false, tradelog=utils.true, doprint=utils.true)
 cerebro.addstrategy(strategys.SchedStrategy,
                     multiperiod=multiperiod, doprint=utils.true, orderlog=utils.false, tradelog=utils.true)
-start = '2019-06-22'
+start = '2020-05-22'
 end = '2020-06-22'
 
 # df = utils.get_database_data(code, start)
@@ -102,7 +102,7 @@ cerebro.broker.setcommission(commission=0.00001)
 print('Starting Portfolio Value: %.3f' % cerebro.broker.getvalue())
 strats = cerebro.run(maxcpus=1, optreturn=utils.true)
 strat = strats[0]
-# utils.print_transaction(strat)
+utils.print_transaction(strat)
 # accountinfo = strat.analyzers.AccountValue.get_analysis()
 # data = utils.getstratdata(strat, accountinfo)
 # utils.plot_strategy(

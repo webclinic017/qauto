@@ -12,6 +12,8 @@ import sys
 import asyncio
 from tornado import ioloop, gen
 
+import asynctasks
+
 from pprint import pprint
 import pyecharts.options as opts
 from pyecharts.globals import CurrentConfig, OnlineHostType, SymbolType
@@ -23,6 +25,7 @@ import tushare as ts
 import backtrader as bt
 from bs4 import BeautifulSoup as bs
 import requests
+import httpx
 from sklearn import svm
 import numpy as np
 from analyzers import AccountValue
@@ -57,6 +60,7 @@ g_share = {}
 # https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
 # 股指期货: http://data.10jqka.com.cn/gzqh/index/instrumentId/IF2007/
 # http://www.cffex.com.cn/
+# https://github.com/DataIntegrationAlliance/data_integration_celery
 
 
 def get_all_futures():
@@ -125,7 +129,7 @@ def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund'):
     return df
 
 
-def get_database_data(code, start='', end='', dbname='k_data', live=false):
+def get_database_data(code, start='', end='', dbname='k_data', slg='', live=false):
     db = models.KDATA()
     wheres = [
         {'k': 'code', 'v': code, 'op': '='},
@@ -140,7 +144,8 @@ def get_database_data(code, start='', end='', dbname='k_data', live=false):
         where = {'k': 'datetime', 'v': end, 'op': '<='}
         wheres.append(where)
     orderby = 'timestamp asc'
-    df = db.select_data(dbname, wheres=wheres, orderby=orderby, live=live)
+    df = db.select_data(dbname, wheres=wheres,
+                        orderby=orderby, slg=slg, live=live)
     if df.empty:
         return pd.DataFrame()
     df.index = df['datetime']
@@ -875,26 +880,6 @@ def is_trade_day(day=None):
 # %%
 
 
-def asyncio_tasks(func, tasks, *args, **kw):
-    if not g_share.get('loop', None):
-        # 设置一个主loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        g_share['loop'] = loop
-    # loop = asyncio.get_event_loop()
-    loop = g_share['loop']
-    coroutines = [func(task, *args, **kw) for task in tasks]
-    wait_coroutines = asyncio.wait(coroutines)
-    loop.run_until_complete(wait_coroutines)
-    # loop.close()
-
-
-@gen.coroutine
-def tornado_tasks(func, tasks, *args, **kw):
-    for task in tasks:
-        yield func(task, *args, **kw)
-
-
 def get_morning_star(first=true, data={}):
     url = 'http://cn.morningstar.com/quickrank/default.aspx'
     headers = {
@@ -1111,10 +1096,112 @@ def check_order():
         o.db.upsert(row, dbname=o.dbname, sets=sets, wheres=wheres)
 
 
+async def get_one_rt(code, start='', page=0, totalpage=0, init=false, db=None):
+    print('async start...,{},page:{}'.format(code, page))
+    if not init and not start:
+        start = get_datetime_date(flag='-', days=-1)
+    elif not start:
+        wheres = [
+            {'k': 'code', 'v': code}
+        ]
+        dbname = 'fund_info'
+        df = db.select(dbname=dbname, wheres=wheres)
+        try:
+            start = df.clrq.values[0][:10]
+        except Exception as ex:
+            print(ex, code, page)
+            return
+    end = get_datetime_date(flag='-')
+    url = 'http://quotes.money.163.com/fund/zyjl_{}_{}.html?start={}&end={}&sort=TDATE&order=desc'.format(
+        code, page, start, end
+    )
+    headers = {
+        'User-Agent': 'Mozilla/5.0',
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(url, headers=headers)
+            if res.status_code != 200:
+                await asyncio.sleep(0.75)
+                asyncio.ensure_future(get_one_rt(
+                    code, start=start, page=page, totalpage=totalpage, init=init, db=db))
+                return
+            print(url, res.status_code)
+            soup = bs(res.content, 'lxml')
+            detail = soup.find(
+                'table', attrs={'class': 'fn_cm_table'}).find('tbody')
+            items = detail.find_all('tr')
+            dbname = 'k_data'
+            for item in items:
+                tds = item.find_all('td')
+                date = tds[0].get_text()
+                tp = int(datetime.strptime(date, '%Y-%m-%d').timestamp())
+                rttext = tds[-1].get_text()
+                if '--' in rttext:
+                    rt = 0.0
+                else:
+                    rt = float(rttext.split('%')[0])
+                wheres = [
+                    {'k': 'code', 'v': code},
+                    {'k': 'timestamp', 'v': tp},
+                ]
+                sets = [
+                    {'k': 'rt', 'v': rt}
+                ]
+                db.upsert({}, dbname=dbname, sets=sets, wheres=wheres)
+            # currentpage = int(soup.find('span', attrs={'class': 'current'}).get_text())
+            if totalpage == 0 and init:
+                totalpage_ele = soup.find('span', attrs={'class': 'page_dot'})
+                totalpage = int(totalpage_ele.next_sibling.get_text())
+            if page < totalpage and page < 21 and init:
+                page += 1
+                asyncio.ensure_future(get_one_rt(
+                    code, start=start, page=page, totalpage=totalpage, init=init, db=db))
+                # loop = asyncio.get_event_loop()
+                # tasks = [get_one_rt(code, page=page, totalpage=totalpage, init=init)]
+                # loop.run_until_complete(asyncio.wait(tasks))
+        except Exception as ex:
+            print(ex)
+            asyncio.ensure_future(get_one_rt(
+                code, start=start, page=page, totalpage=totalpage, init=init, db=db))
+
+
+def asyncio_tasks(func, forever=false, tasks=[], *args, **kw):
+    if not g_share.get('loop', None):
+        # 设置一个主loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        g_share['loop'] = loop
+    # loop = asyncio.get_event_loop()
+    loop = g_share['loop']
+    coroutines = [func(task, *args, **kw) for task in tasks]
+    wait_coroutines = asyncio.wait(coroutines)
+    loop.run_until_complete(wait_coroutines)
+    if forever:
+        loop.run_forever()
+    # loop.close()
+
+
+@gen.coroutine
+def tornado_tasks(func, tasks, *args, **kw):
+    for task in tasks:
+        yield func(task, *args, **kw)
+
+
 # %%
 if __name__ == "__main__":
     pass
     # get_all_futures()
     # check_order()
-    update_fund_info()
+    # update_fund_info()
+    codes = ['165309']
+    dbname = 'fund_info'
+    # get_ts_data(code)
+    db = models.DB()
+    wheres = [
+        {'k': 'qtype', 'v': 'lof'}
+    ]
+    codes = db.select_distinct(dbname, pk='code', wheres=wheres)
+    asyncio_tasks(get_one_rt, forever=true, tasks=codes, init=true, db=db)
+    # get_one_rt(code, init=false)
     # import ipdb; ipdb.set_trace()
