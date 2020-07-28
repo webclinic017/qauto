@@ -1,6 +1,7 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
+import warnings
 import json
 import models
 import math
@@ -10,9 +11,8 @@ import os
 import sys
 
 import asyncio
-from tornado import ioloop, gen
 
-import asynctasks
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pprint import pprint
 import pyecharts.options as opts
@@ -24,7 +24,6 @@ import tushare as ts
 # import akshare as ak
 import backtrader as bt
 from bs4 import BeautifulSoup as bs
-import requests
 import httpx
 from sklearn import svm
 import numpy as np
@@ -37,9 +36,12 @@ import remoteclient
 # %%
 # 处理pyecharts在notebook显示空白
 CurrentConfig.ONLINE_HOST = OnlineHostType.NOTEBOOK_HOST
+# 处理warning
+warnings.filterwarnings("ignore")
 
 true = True
 false = False
+emptydf = pd.DataFrame()
 
 basedir = '/data/data/com.termux/files/home/qauto'
 serverdir = '{}/server'.format(basedir)
@@ -54,7 +56,13 @@ for fdir in dirs:
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
-g_share = {}
+fund_info_file = '{}/fund_info.csv'.format(csvpath)
+fund_today_file = '{}/fund_today.csv'.format(csvpath)
+fund_rt_today_file = '{}/fund_rt_today.csv'.format(csvpath)
+fund_tt_rt_today_file = '{}/fund_tt_rt_today.csv'.format(csvpath)
+
+g_share = {'conn': ts.get_apis()}
+
 
 # %%
 # https://www.akshare.xyz/zh_CN/latest/data/futures/futures.html?highlight=%E6%9C%9F%E8%B4%A7#id35
@@ -94,35 +102,30 @@ def get_ak_data(symbol, start='', end=''):
 # 从tushare取数据,默认d,5min,60min
 # http://tushare.org/trading.html#id2
 # https://www.yisu.com/zixun/14379.html
-def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund'):
-    # ts.get_k_data
-    # ts.get_hist_data
-    # ts.bar
-    # ts.get_h_data
-    # pro = ts.pro_api()
-    # pro.query
-    # pro.fund_daily
-    # ts.pro_bar
-    df = ts.bar(code, conn=ts.get_apis(), start_date=start,
+def get_ts_data(code, start=None, end=None, freq='D', retry=0, _type='fund', live=false):
+    if not is_trade_day() and live:
+        return emptydf
+    conn = g_share['conn']
+    df = ts.bar(code, conn=conn, start_date=start,
                 end_date=end, freq=freq)
     try:
         if df.empty:
-            return pd.DataFrame()
+            return emptydf
     except Exception as ex:
         print(ex)
         retry += 1
         if retry < 3:
             print('get_ts_data 重试 {0} 次'.format(retry))
-            time.sleep(1.25)
+            time.sleep(0.25)
             return get_ts_data(code, start, end, freq, retry)
         else:
-            return pd.DataFrame()
+            return emptydf
     now = datetime.now()
-    if len(df) > 0 and is_trade_day() and now.hour < 17 and freq == 'D':
+    if len(df) > 0 and now.hour < 17 and freq == 'D':
         df.drop(df.index[0], inplace=true)
-    # print(df)
     df['datetime'] = df.index
     df['type'] = _type
+    df['rt'] = 0.0
     df['createdtime'] = int(now.timestamp())
     df.rename(columns={'vol': 'volume'}, inplace=true)
     df = df.sort_index()
@@ -211,7 +214,8 @@ def addanalyzer(cerebro):
 
 def get_all_etf(_type=''):
     url = 'https://www.joinquant.com/help/api/getContent?name=fund'
-    res = requests.get(url)
+    print(url)
+    res = httpx.get(url)
     data = res.json().get('data', '')
     soup = bs(data, 'lxml')
     if not _type:
@@ -545,12 +549,12 @@ def ggt_top10(date):
     for k, v in stys.items():
         url = 'https://emdatah5.eastmoney.com/dc/HSGTN/GetTenTopData?sty={}&filter=(DetailDate%3D%5E{}%5E)({})'.format(
             k, date, v)
-        res = requests.get(url)
+        res = httpx.get(url)
         content = str(res.content, encoding='utf8')
         content = json.loads(content[23:-2])
         df = pd.DataFrame(content)
         dfs.append(df)
-    df = contact_pandas(dfs)
+    df = pandas_contact(dfs)
     if df.empty:
         return
     df['datetime'] = df['DetailDate'].apply(
@@ -569,7 +573,7 @@ def ggt_top10(date):
     db.insert(df, dbname, pks)
 
 
-def contact_pandas(dfs):
+def pandas_contact(dfs):
     for df in dfs:
         df.reset_index(drop=true, inplace=true)
     newdfs = pd.concat(dfs, axis=0, ignore_index=true)
@@ -636,9 +640,15 @@ def _get_query_str(querystr, k, v, op):
         op = '=='
 
     if querystr == '':
-        querystr += '{}{}{}'.format(k, op, v)
+        if isinstance(v, str):
+            querystr += '{}{}"{}"'.format(k, op, v)
+        else:
+            querystr += '{}{}{}'.format(k, op, v)
     else:
-        querystr += ' and {}{}{}'.format(k, op, v)
+        if isinstance(v, str):
+            querystr += '{}{}"{}"'.format(k, op, v)
+        else:
+            querystr += ' and {}{}{}'.format(k, op, v)
     return querystr
 
 
@@ -661,6 +671,15 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
             # 过滤下一个5分钟K线
             querystr = 'timestamp < {}'.format(int(time.time()))
             da = df.query(querystr)
+            if dbname == 'k_data':
+                # 处理溢价
+                print(code, 'rt')
+                rts = g_share.get(code, {})
+                for tpstr in rts.keys():
+                    tp = int(tpstr)
+                    da.loc[da.timestamp == tp, 'rt'] = rts[tpstr]
+                # 过滤错误信息
+                # da.drop(da[(da.amount==da.amount.values[0]) & (da.close==da.close.values[0])].index, inplace=True)
             pandas_save(da, file)
             return false
 
@@ -690,6 +709,13 @@ def update_one_code(code, start='', end='', db=None, dbname='', freq='D', _type=
                 else:
                     break
             if not isempty:
+                # 处理溢价
+                if dbname == 'k_data':
+                    print(code, 'rt')
+                    rts = g_share.get(code, {})
+                    for tpstr in rts.keys():
+                        tp = int(tpstr)
+                        da.loc[da.timestamp == tp, 'rt'] = rts[tpstr]
                 pandas_save(da, file)
         return isempty
 
@@ -740,24 +766,131 @@ def update_k_data(code, start='', db=None, dbname='k_data', live=false, init=fal
                     dbname=dbname, freq=freq, live=live, init=init)
 
 
-def _update_fund_info(code, db=None, dbname='fund_info', qtype='lof'):
-    df = ts.get_fund_info(code)
-    df.insert(0, 'code', code)
-    df.insert(1, 'code_cn', '')
-    df.insert(2, 'qtype', qtype)
-    pks = ['code', 'glr']
-    db.insert(df, dbname=dbname, pks=pks)
-
-
 def update_fund_info():
-    db = models.DB()
-    # qtypes = ['etf', 'lotf']
-    qtypes = ['lof']
-    for qtype in qtypes:
-        codes = get_all_etf(_type=qtype)
-        asyncio_tasks(_update_fund_info, codes, db=db, qtype=qtype)
-        # for code in codes:
-        #     _update_fund_info(code, db=db, qtype=qtype)
+    dfs = []
+    if not os.path.exists(fund_today_file):
+        update_fund_today()
+    da = pd.read_csv(fund_today_file)
+    for _, row in da.iterrows():
+        code = row.code
+        df = ts.get_fund_info(code)
+        df.insert(0, 'code', code)
+        df.insert(1, 'code_cn', row['name'])
+        df.insert(2, 'qtype', row.qtype)
+        dfs.append(df)
+    da = pandas_contact(dfs)
+    pandas_save(da, fund_info_file)
+
+
+def update_fund_rt_today():
+    jisilu_prefix = 'https://www.jisilu.cn/data'
+    tp = int(time.time())
+    page = 25
+    jisilu_urls_map = [
+        '{}/lof/stock_lof_list/?___jsl=LST___t={}&rp={}&page=1'.format(
+            jisilu_prefix, tp, page),
+        '{}/lof/index_lof_list/?___jsl=LST___t={}&rp={}&page=1'.format(
+            jisilu_prefix, tp, page),
+        '{}/qdii/qdii_list/A?___jsl=LST___t={}&rp={}&page=1'.format(
+            jisilu_prefix, tp, page),
+        '{}/qdii/qdii_list/E?___jsl=LST___t={}&rp={}&page=1'.format(
+            jisilu_prefix, tp, page),
+        '{}/qdii/qdii_list/C?___jsl=LST___t={}&rp={}&page=1'.format(
+            jisilu_prefix, tp, page),
+    ]
+    retsults = asyncio_tasks(
+        get_fund_rt_today,
+        tasks=jisilu_urls_map[:2],
+        qtype='lof'
+    )
+    retsults.extend(
+        asyncio_tasks(
+            get_fund_rt_today,
+            tasks=jisilu_urls_map[2:],
+            qtype='qdii'
+        )
+    )
+    retsults = [i for item in retsults for i in item]
+    df = pd.DataFrame(retsults)
+    need_save = ['fund_id', 'fund_nm', 'price', 'volume', 'nav_dt', 'last_time', 'estimate_value', 'fund_nav',
+                 'apply_status', 'discount_rt', 'qtypexxxx']
+    for column in df.columns:
+        if column not in need_save:
+            df.drop(
+                [column],
+                axis=1,
+                inplace=true
+            )
+    df.sort_values(by='volume', ascending=false, inplace=true)
+    pandas_save(df, fund_rt_today_file)
+    return df
+
+
+def update_fund_tt_rt_today():
+    tt_url = 'http://api.fund.eastmoney.com/FundGuZhi/GetFundGZList?type=8&sort=3&orderType=desc&canbuy=1&pageIndex=1&pageSize=20000'
+    retsults = asyncio_tasks(
+        get_fund_tt_rt_today,
+        tasks=[tt_url]
+    )
+    retsults = [i for item in retsults for i in item]
+    df = pd.DataFrame(retsults)
+    pandas_save(df, fund_tt_rt_today_file)
+    return df
+
+
+def update_fund_today(rt=true):
+    print('更新lof,etf数据...')
+    if rt:
+        tt_rts = update_fund_tt_rt_today()
+        jisilu_rts = update_fund_rt_today()
+    qtypes = ['lof', 'etf']
+    results = asyncio_tasks(
+        get_fund_today,
+        tasks=qtypes,
+    )
+    results = results[0]
+    da = pd.DataFrame(results)
+    if rt:
+        da['jisilu_rt'] = 0.0
+        da['tt_rt'] = 0.0
+        for _, row in jisilu_rts.iterrows():
+            try:
+                da.loc[da.code == row.fund_id,
+                       'jisilu_rt'] = float(row.discount_rt.replace('%', ''))
+            except Exception as ex:
+                print(ex)
+        for _, row in tt_rts.iterrows():
+            t = da.loc[da.code == row.bzdm]
+            try:
+                close = t.trade.astype('float').values[0]
+            except:
+                pass
+                # print(ex, row.bzdm, code_cn)
+            if not close:
+                continue
+
+            if '---' in row.gsz:
+                continue
+
+            gz = float(row.gsz)
+            tt_rt = (close - gz) / close
+            da.loc[da.code == row.bzdm, 'tt_rt'] = get_float(tt_rt, n=2)
+
+    # da.sort_values(by=['amount', 'jisilu_rt', 'tt_rt'], ascending=[false, false, false], inplace=true)
+    pandas_save(da, fund_today_file)
+    g_share['fund_today'] = da
+
+
+def load_fund_info():
+    da = g_share.get('fund_info', emptydf)
+    if len(da) > 0:
+        print('fund_info,', '已加载')
+        return
+    if not os.path.exists(fund_info_file):
+        update_fund_info()
+    print('fund_info,', '加载中...')
+    da = pd.read_csv(fund_info_file)
+    g_share['fund_info'] = da
 
 
 def update_future():
@@ -887,10 +1020,10 @@ def get_morning_star(first=true, data={}):
         'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36",
     }
     if first:
-        res = requests.get(url, headers=headers)
+        res = httpx.get(url, headers=headers)
     else:
         # print(data)
-        res = requests.post(url, headers=headers, data=data)
+        res = httpx.post(url, headers=headers, data=data)
     soup = bs(res.content, 'lxml')
     viewstate = soup.find('input', attrs={'name': '__VIEWSTATE'})
     validation = soup.find('input', attrs={'name': '__EVENTVALIDATION'})
@@ -1060,7 +1193,7 @@ def notify_to_wx(title, text):
     key = "SCU53613T74bdd3a5e5ff2eb57218f74f71d495965d0711a8483e7"
     wx_url = "https://sc.ftqq.com/{0}.send?text={1}&desp={2}".format(
         key, title, text)
-    requests.get(wx_url)
+    httpx.get(wx_url)
 
 
 def get_csv_file(code, dbname):
@@ -1096,77 +1229,170 @@ def check_order():
         o.db.upsert(row, dbname=o.dbname, sets=sets, wheres=wheres)
 
 
-async def get_one_rt(code, start='', page=0, totalpage=0, init=false, db=None):
-    print('async start...,{},page:{}'.format(code, page))
-    if not init and not start:
-        start = get_datetime_date(flag='-', days=-1)
-    elif not start:
-        wheres = [
-            {'k': 'code', 'v': code}
-        ]
-        dbname = 'fund_info'
-        df = db.select(dbname=dbname, wheres=wheres)
-        try:
-            start = df.clrq.values[0][:10]
-        except Exception as ex:
-            print(ex, code, page)
-            return
-    end = get_datetime_date(flag='-')
-    url = 'http://quotes.money.163.com/fund/zyjl_{}_{}.html?start={}&end={}&sort=TDATE&order=desc'.format(
-        code, page, start, end
-    )
-    headers = {
+async def httpx_get(url, headers={}, retry=0, *args, **kw):
+    default_headers = {
         'User-Agent': 'Mozilla/5.0',
     }
+    if headers:
+        headers.update(default_headers)
+
     async with httpx.AsyncClient() as client:
         try:
             res = await client.get(url, headers=headers)
             if res.status_code != 200:
-                await asyncio.sleep(0.75)
-                asyncio.ensure_future(get_one_rt(
-                    code, start=start, page=page, totalpage=totalpage, init=init, db=db))
-                return
-            print(url, res.status_code)
-            soup = bs(res.content, 'lxml')
-            detail = soup.find(
-                'table', attrs={'class': 'fn_cm_table'}).find('tbody')
-            items = detail.find_all('tr')
-            dbname = 'k_data'
-            for item in items:
-                tds = item.find_all('td')
-                date = tds[0].get_text()
-                tp = int(datetime.strptime(date, '%Y-%m-%d').timestamp())
-                rttext = tds[-1].get_text()
-                if '--' in rttext:
-                    rt = 0.0
-                else:
-                    rt = float(rttext.split('%')[0])
-                wheres = [
-                    {'k': 'code', 'v': code},
-                    {'k': 'timestamp', 'v': tp},
-                ]
-                sets = [
-                    {'k': 'rt', 'v': rt}
-                ]
-                db.upsert({}, dbname=dbname, sets=sets, wheres=wheres)
-            # currentpage = int(soup.find('span', attrs={'class': 'current'}).get_text())
-            if totalpage == 0 and init:
-                totalpage_ele = soup.find('span', attrs={'class': 'page_dot'})
-                totalpage = int(totalpage_ele.next_sibling.get_text())
-            if page < totalpage and page < 21 and init:
-                page += 1
-                asyncio.ensure_future(get_one_rt(
-                    code, start=start, page=page, totalpage=totalpage, init=init, db=db))
-                # loop = asyncio.get_event_loop()
-                # tasks = [get_one_rt(code, page=page, totalpage=totalpage, init=init)]
-                # loop.run_until_complete(asyncio.wait(tasks))
+                if retry > 3:
+                    return None
+                retry += 1
+                await asyncio.sleep(0.25*retry)
+                ret = await httpx_get(url, headers=headers, retry=retry, *args, **kw)
+                return ret
+            return res
         except Exception as ex:
             print(ex)
-            asyncio.ensure_future(get_one_rt(
-                code, start=start, page=page, totalpage=totalpage, init=init, db=db))
+            if retry > 3:
+                return None
+            retry += 1
+            await asyncio.sleep(0.75*retry)
+            ret = await httpx_get(url, headers=headers, retry=retry, *args, **kw)
+            return ret
 
 
-def asyncio_tasks(func, forever=false, tasks=[], *args, **kw):
+async def get_fund_tt_rt_today(url):
+    print(url)
+    headers = {
+        'Referer': 'http://fund.eastmoney.com/fundguzhi.html',
+    }
+    try:
+        res = await httpx_get(url, headers=headers)
+        if res:
+            items = res.json()
+            results = res.json()['Data']['list']
+            return results
+
+    except Exception as ex:
+        print(ex)
+        asyncio.sleep(0.75)
+        results = await get_fund_tt_rt_today(url)
+        return results
+
+
+async def get_fund_rt_today(url, qtype='lof'):
+    print(url)
+    try:
+        res = await httpx_get(url)
+        if res:
+            items = res.json()
+            results = []
+            for item in items['rows']:
+                row = item['cell']
+                row['qtype'] = qtype
+                results.append(row)
+            return results
+
+    except Exception as ex:
+        print(ex)
+        asyncio.sleep(0.75)
+        results = await get_fund_rt_today(url, qtype=qtype)
+        return results
+
+
+async def get_fund_today(qtype, page=1, results=[]):
+    # http://vip.stock.finance.sina.com.cn/fund_center/index.html#jjhqlof
+    # http://quote.eastmoney.com/center/gridlist.html#fund_lof
+    url = 'http://vip.stock.finance.sina.com.cn/quotes_service/api/jsonp.php/IO.XSRV2.CallbackList/Market_Center.getHQNodeDataSimple?page={}&num=80&sort=amount&asc=0&node={}_hq_fund'.format(
+        page, qtype
+    )
+    print(url)
+    try:
+        res = await httpx_get(url)
+        jsonstr = res.text.split('(')[1][:-2]
+        items = json.loads(jsonstr)
+        # pprint(result)
+        if items:
+            for item in items:
+                item['qtype'] = qtype
+                results.append(item)
+
+            page += 1
+            results = await get_fund_today(qtype, page=page, results=results)
+        return results
+    except Exception as ex:
+        print(ex)
+        results = await get_fund_today(qtype, page=page, results=results)
+        return results
+
+
+async def get_one_rt(code, start='', page=0, totalpage=0, init=false):
+    print('rt start...,{},page:{}'.format(code, page))
+    if not init and not start:
+        start = get_datetime_date(flag='-', days=-3)
+    elif not start:
+        fundinfo = g_share.get('fund_info', emptydf)
+        if len(fundinfo) == 0:
+            load_fund_info()
+        querys = dict(
+            code=code,
+        )
+        querystr = get_query_str(querys)
+        df = fundinfo.query(querystr)
+        try:
+            start = df.clrq.values[0][:10]
+        except Exception as ex:
+            print(ex, code, page)
+            start = '2015-01-01'
+            # return
+    end = get_datetime_date(flag='-')
+    # http://quotes.money.163.com/fund/zyjl_501300_0.html
+    url = 'http://quotes.money.163.com/fund/zyjl_{}_{}.html?start={}&end={}&sort=TDATE&order=desc'.format(
+        code, page, start, end
+    )
+    try:
+        res = await httpx_get(url)
+        if not res:
+            await asyncio.sleep(0.25)
+            await get_one_rt(
+                code, start=start, page=page, totalpage=totalpage, init=init)
+            return
+        print(url, res.status_code)
+        soup = bs(res.content, 'lxml')
+        detail = soup.find(
+            'table', attrs={'class': 'fn_cm_table'}).find('tbody')
+        items = detail.find_all('tr')
+        rts = g_share.get(code, {})
+        for item in items:
+            tds = item.find_all('td')
+            date = tds[0].get_text()
+            tp = int(datetime.strptime(date, '%Y-%m-%d').timestamp())
+            rttext = tds[-1].get_text()
+            if '--' in rttext:
+                rt = 0.0
+            else:
+                rt = float(rttext.split('%')[0])
+            rts[str(tp)] = rt
+        g_share[code] = rts
+        if totalpage == 0 and init:
+            totalpage_ele = soup.find(
+                'div', attrs={'class': 'mod_pages'}).find_all('a')[-2]
+            if not totalpage_ele:
+                # 过滤上市周期短
+                return
+            totalpage = int(totalpage_ele.get_text())
+        if page < totalpage and init:
+            # 获取15年前的溢价
+            page += 1
+            await get_one_rt(
+                code, start=start, page=page, totalpage=totalpage, init=init)
+            return
+
+    except Exception as ex:
+        print(ex)
+        await asyncio.sleep(0.75)
+        await get_one_rt(
+            code, start=start, page=page, totalpage=totalpage, init=init)
+        return
+
+
+def asyncio_tasks(func, tasks=[], *args, **kw):
     if not g_share.get('loop', None):
         # 设置一个主loop
         loop = asyncio.new_event_loop()
@@ -1174,34 +1400,60 @@ def asyncio_tasks(func, forever=false, tasks=[], *args, **kw):
         g_share['loop'] = loop
     # loop = asyncio.get_event_loop()
     loop = g_share['loop']
-    coroutines = [func(task, *args, **kw) for task in tasks]
-    wait_coroutines = asyncio.wait(coroutines)
-    loop.run_until_complete(wait_coroutines)
-    if forever:
-        loop.run_forever()
+    tasks = [loop.create_task(func(task, *args, **kw)) for task in tasks]
+    wait_tasks = asyncio.wait(tasks)
+    loop.run_until_complete(wait_tasks)
+    results = []
+    for task in tasks:
+        ret = task.result()
+        results.append(ret)
+    return results
+
     # loop.close()
 
+# 有任务不执行???
 
-@gen.coroutine
-def tornado_tasks(func, tasks, *args, **kw):
-    for task in tasks:
-        yield func(task, *args, **kw)
+
+def thread_and_asyncio_tasks(func, tasks=[], *args, **kw):
+    num_threads = 4
+    tasklen = len(tasks)
+    taskstep = int(tasklen/num_threads)
+    with ThreadPoolExecutor(num_threads) as executor:
+        if tasklen <= num_threads:
+            executor.submit(
+                asyncio_tasks, func=func, tasks=tasks, *args, **kw)
+            return
+        for i in range(num_threads):
+            start = i*taskstep
+            end = (i+1)*taskstep
+            if i + 1 == num_threads:
+                end = tasklen
+            print(tasks[start:end])
+            executor.submit(
+                asyncio_tasks, func=func, tasks=tasks[start: end], *args, **kw)
 
 
 # %%
 if __name__ == "__main__":
-    pass
-    # get_all_futures()
-    # check_order()
-    # update_fund_info()
-    codes = ['165309']
-    dbname = 'fund_info'
-    # get_ts_data(code)
-    db = models.DB()
-    wheres = [
-        {'k': 'qtype', 'v': 'lof'}
-    ]
-    codes = db.select_distinct(dbname, pk='code', wheres=wheres)
-    asyncio_tasks(get_one_rt, forever=true, tasks=codes, init=true, db=db)
-    # get_one_rt(code, init=false)
-    # import ipdb; ipdb.set_trace()
+    # load_fund_info()
+    st = int(time.time())
+    now = datetime.now()
+    print(now)
+    update_fund_today(rt=true)
+    print((time.time()-st))
+
+    # df = g_share['fund_info']
+    # querys = dict(
+    #     qtype='lof',
+    # )
+    # querystr = get_query_str(querys)
+    # df = df.query(querystr)
+    # codes = df.code.values.tolist()
+    # codes = [str(code) for code in codes]
+    # print(codes)
+    # st = time.time()
+    # thread_and_asyncio_tasks(get_one_rt, tasks=codes[:10],
+    #                          init=true)
+    # print(g_share)
+    # print((time.time()-st)/60)
+    # asyncio_tasks(get_one_rt, forever=true, tasks=codes, init=true, db=db)

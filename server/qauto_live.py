@@ -28,7 +28,7 @@ def start_strategy(strategy, code, code_cn, slg='', live=utils.false):
         multiperiod=multiperiod,
         _live=live,
         orderlog=utils.false,
-        tradelog=utils.true,
+        tradelog=utils.false,
         doprint=utils.true,
     )
     # 获取3个月前数据,保证指标正常
@@ -44,10 +44,10 @@ def start_strategy(strategy, code, code_cn, slg='', live=utils.false):
         df = utils.get_database_data(
             code, dbname=dbname, start=start, slg=slg, live=live)
         # 验证数据
-        # print(df)
         if df.empty:
             print(code, '未获取到数据')
             continue
+        # print(df)
         name = '{}:{}:{}'.format(code, code_cn, dbname)
         data = models.PandasData(dataname=df, name=name)
         cerebro.adddata(data)
@@ -66,13 +66,15 @@ def start_strategy(strategy, code, code_cn, slg='', live=utils.false):
     print('Final Portfolio Value: %.3f' % cerebro.broker.getvalue())
 
 
-def run_strategy(fund, live):
+def run_one_strategy(fund, live):
     # 消费特殊处理,cmi值一直偏高
     if isinstance(fund, str):
         return
     code = fund['code']
     code_cn = fund['code_cn']
-    slg = fund['slg']
+    slg = fund.get('slg', '')
+    if not slg:
+        return
     if slg == 'sched':
         strategy = strategys.SchedStrategy
     elif slg == 'twap':
@@ -84,48 +86,12 @@ def run_strategy(fund, live):
 
     start_strategy(strategy, code, code_cn, slg, live)
 
+def run_strategy(funds, live=utils.true):
+    print('开始回测,{}'.format(funds))
+    for fund in funds:
+        run_one_strategy(fund, live)
 
-def one_run_strategy(fund, db=None, dbname='', live=utils.true):
-    if isinstance(fund, dict):
-        code = fund['code']
-    elif isinstance(fund, str):
-        code = fund
-    else:
-        raise Exception('获取code失败')
-    isempty = utils.update_k_5min_data(
-        code, db=db, dbname=dbname, live=live, init=utils.false)
-    _dbname = 'k_data'
-    if live:
-        # 检查k_data是否已更新
-        file = utils.get_csv_file(code, _dbname)
-        isupdate = utils.false
-        if utils.os.path.exists(file):
-            stat = utils.get_stat(file)
-            if int(utils.time.time()) - stat.st_mtime > 60*60*12:
-                isupdate = utils.true
-        else:
-            isupdate = utils.true
-        if isupdate:
-            utils.update_k_data(
-                code, db=db, dbname=_dbname, live=live, init=utils.false
-            )
-    else:
-        wheres = [
-            {'k': 'code', 'v': code}
-        ]
-        count = db.select_count(_dbname, wheres)
-        if count == 0:
-            utils.update_k_data(
-                code, db=db, dbname=_dbname, live=live, init=utils.true
-            )
-
-    # if not isempty:
-    if 1:
-        run_strategy(fund, live)
-
-
-@gen.coroutine
-def tornado_run_strategy(fund, db=None, dbname='', live=utils.true, init=utils.true):
+async def asyncio_update_k_5min_data(fund, db=None, dbname='', live=utils.true, init=False):
     if isinstance(fund, dict):
         code = fund['code']
     elif isinstance(fund, str):
@@ -143,7 +109,11 @@ def tornado_run_strategy(fund, db=None, dbname='', live=utils.true, init=utils.t
             stat = utils.get_stat(file)
             if int(utils.time.time()) - stat.st_mtime > 60*60*12:
                 isupdate = utils.true
+                # 获取近期溢价
+                await utils.get_one_rt(code, init=utils.false)
         else:
+            # 获取全部溢价
+            await utils.get_one_rt(code, init=utils.true)
             isupdate = utils.true
         if isupdate:
             utils.update_k_data(
@@ -158,55 +128,8 @@ def tornado_run_strategy(fund, db=None, dbname='', live=utils.true, init=utils.t
             utils.update_k_data(
                 code, db=db, dbname=_dbname, live=live, init=utils.true
             )
-
     if not isempty:
-        run_strategy(fund, live)
-
-
-@gen.coroutine
-def tornado_update_k_data(fund, db=None, dbname='', live=utils.true):
-    code = fund['code']
-    utils.update_k_data(
-        code, db=db, dbname=dbname, live=live, init=utils.false
-    )
-
-
-async def asyncio_run_strategy(fund, db=None, dbname='', live=utils.true, init=False):
-    if isinstance(fund, dict):
-        code = fund['code']
-    elif isinstance(fund, str):
-        code = fund
-    else:
-        raise Exception('获取code失败')
-    isempty = utils.update_k_5min_data(
-        code, db=db, dbname=dbname, live=live, init=init)
-    _dbname = 'k_data'
-    if live:
-        # 检查k_data是否已更新
-        file = utils.get_csv_file(code, _dbname)
-        isupdate = utils.false
-        if utils.os.path.exists(file):
-            stat = utils.get_stat(file)
-            if int(utils.time.time()) - stat.st_mtime > 60*60*12:
-                isupdate = utils.true
-        else:
-            isupdate = utils.true
-        if isupdate:
-            utils.update_k_data(
-                code, db=db, dbname=_dbname, live=live, init=utils.false
-            )
-    else:
-        wheres = [
-            {'k': 'code', 'v': code}
-        ]
-        count = db.select_count(_dbname, wheres)
-        if count == 0 or init:
-            utils.update_k_data(
-                code, db=db, dbname=_dbname, live=live, init=utils.true
-            )
-
-    if not isempty:
-        run_strategy(fund, live)
+        run_one_strategy(fund, live)
 
 
 async def asyncio_update_k_data(fund, db=None, dbname='', live=utils.true):
@@ -227,14 +150,10 @@ if __name__ == "__main__":
     live = utils.true
     dbname = 'k_5min_data'
     # dbname = 'k_data'
-    # for fund in funds:
-    #     # tornado_run_strategy(fund, db, dbname, live)
-    #     one_run_strategy(fund, db, dbname, live)
+    # utils.load_fund_info()
+    # fundinfo = utils.g_share['fund_info']
+    # funds = [str(code) for code in fundinfo.code.values.tolist()]
+    utils.asyncio_tasks(asyncio_update_k_5min_data, tasks=funds, db=db, dbname=dbname, live=utils.false, init=utils.true)
 
-    utils.asyncio_tasks(asyncio_run_strategy, tasks=funds,
-                        db=db, dbname=dbname, live=utils.false, init=utils.true)
-
-    # utils.tornado_tasks(tornado_run_strategy, tasks=funds,
-    #                     db=db, dbname=dbname, live=utils.false, init=utils.true)
-    # ioloop.IOLoop.instance().start()
+    # run_strategy(funds)
                     

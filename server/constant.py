@@ -11,13 +11,13 @@ trade_funds = [
     # {'code': '159941', 'code_cn': '纳指ETF'},
     # {'code': '513500', 'code_cn': '标普500'},
 
-    # # {'code': '161130', 'code_cn': '纳指LOF'},
-    # # {'code': '161128', 'code_cn': '标普科技'},
-    # # {'code': '161125', 'code_cn': '标普500'},
+    # {'code': '161130', 'code_cn': '纳指LOF'},
+    # {'code': '161128', 'code_cn': '标普科技'},
+    # {'code': '161125', 'code_cn': '标普500'},
 
     # # {'code': '510630', 'code_cn': '消费行业'},
     # # {'code': '512600', 'code_cn': '主要消费'},
-    # # {'code': '501090', 'code_cn': '主要消费LOF'},
+    # {'code': '501090', 'code_cn': '主要消费LOF'},
 
     # {'code': '162703', 'code_cn': '广发小盘LOF'},
     # {'code': '160918', 'code_cn': '大成小盘LOF'},

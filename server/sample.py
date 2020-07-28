@@ -46,9 +46,9 @@ multiperiod = 'k_5min_data'
 # 162703,twap表现远不如cmi,round长期持有???
 # cerebro.addstrategy(strategys.TWAPMultiStrategy,
 #                     _live=utils.true, multiperiod=multiperiod, orderlog=utils.false, tradelog=utils.true, doprint=utils.true)
-cerebro.addstrategy(strategys.SchedStrategy,
+cerebro.addstrategy(strategys.CMIStrategy,
                     multiperiod=multiperiod, doprint=utils.true, orderlog=utils.false, tradelog=utils.true)
-start = '2020-05-22'
+start = '2019-06-22'
 end = '2020-06-22'
 
 # df = utils.get_database_data(code, start)
@@ -115,7 +115,7 @@ utils.print_transaction(strat)
 # )
 
 print('Final Portfolio Value: %.3f' % cerebro.broker.getvalue())
-cerebro.plot(style='candle')  # line,bar,candle
+# cerebro.plot(style='candle')  # line,bar,candle
 #  cerebro.plot(start=datetime.date(2018, 1, 1), end=datetime.date(2019, 12, 31),
 # cerebro.plot(volume=False, style='candle',
 #              barup='red', bardown='green')

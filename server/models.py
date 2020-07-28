@@ -232,29 +232,47 @@ class KDATA(DB):
                                inplace=utils.true)
 
             df.datetime = df.datetime.astype('datetime64')
-            if dbname == 'k_data' and slg == 'sched':
-                file = utils.get_csv_file(code, 'k_5min_data')
-                da5min = pd.read_csv(file)
-                date = utils.get_datetime_date(flag='-')
-                wheres[1]['v'] = date
-                querystr = utils.get_query_str(wheres)
-                df5min = da5min.query(querystr)
-                todaydata = dict(
-                    code=df5min.code.values[0],
-                    open=df5min.open.values[0],
-                    close=df5min.close.values[-1],
-                    high=df5min.high.max(),
-                    low=df5min.low.min(),
-                    volume=df5min.volume.sum(),
-                    amount=df5min.amount.sum(),
-                    p_change=df.close.values[-1] - df5min.close.values[-1],
-                    datetime=pd.Timestamp(date),
-                    type='fund',
-                    createdtime=0,
-                    timestamp=0,
-                )
-                row = pd.Series(todaydata)
-                df = df.append(row, ignore_index=True)
+            date = utils.get_datetime_date(flag='-')
+            # if dbname == 'k_5min_data':
+            #     fund_today = utils.g_share['fund_today']
+            #     t = fund_today.loc[fund_today.code == code]
+            #     close = t.trade.astype(float).values[0]
+            #     _time = t.ticktime.values[0]
+            #     _dt = '{} {}'.format(date, _time)
+            #     dt = datetime.strptime(_dt, '%Y-%m-%d %H:%M:%S')
+            #     row = dict(
+            #         code=code,
+            #         datetime=dt,
+            #         close=close,
+            #     )
+            #     row_series = pd.Series(row)
+            #     df = df.append(row_series, ignore_index=True)
+            #     df.fillna(0, inplace=True)
+
+            # if dbname == 'k_data' and slg == 'sched':
+            #     file = utils.get_csv_file(code, 'k_5min_data')
+            #     print('文件加载...2', file)
+            #     da5min = pd.read_csv(file)
+            #     wheres[1]['v'] = date
+            #     querystr = utils.get_query_str(wheres)
+            #     import ipdb; ipdb.set_trace()
+            #     df5min = da5min.query(querystr)
+            #     todaydata = dict(
+            #         code=df5min.code.values[0],
+            #         open=df5min.open.values[0],
+            #         close=df5min.close.values[-1],
+            #         high=df5min.high.max(),
+            #         low=df5min.low.min(),
+            #         volume=df5min.volume.sum(),
+            #         amount=df5min.amount.sum(),
+            #         p_change=df.close.values[-1] - df5min.close.values[-1],
+            #         datetime=pd.Timestamp(date),
+            #         type='fund',
+            #         createdtime=0,
+            #         timestamp=0,
+            #     )
+            #     row = pd.Series(todaydata)
+            #     df = df.append(row, ignore_index=True)
 
             return df
         else:
@@ -286,9 +304,10 @@ class Order:
 class PGData(DataBase):
     # 字段拓展
     # linesoverride = True
-    lines = ('code',)
+    lines = ('code', 'rt')
     params = (
         ('code', -1),
+        ('rt', -1),
     )
 
     def __init__(self, dbname):
@@ -307,7 +326,7 @@ class PGData(DataBase):
         self.conn = self.engine.connect()
         now = int(time.time()) - 60
         print(now)
-        sql = 'SELECT datetime,open,high,low,price,volume,code,name FROM {0} WHERE timestamp >= {1}'.format(
+        sql = 'SELECT datetime,open,high,low,price,volume,code,name,rt FROM {0} WHERE timestamp >= {1}'.format(
             self.dbname, now
         )
         self.result = self.conn.execute(sql)
@@ -333,9 +352,10 @@ class PGData(DataBase):
 
 class PandasData(PD):
     # 字段拓展
-    lines = ('code',)
+    lines = ('code', 'rt')
     params = (
         ('code', -1),
+        ('rt', -1),
     )
 
 
@@ -348,6 +368,5 @@ if __name__ == "__main__":
     db.set_index(dbname, indexes)
 
     # print(index, row)
-
 
 # %%

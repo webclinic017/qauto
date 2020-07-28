@@ -102,11 +102,17 @@ def update_k_5min_data_cron():
 
         ret = uc.unlock
         print(ret)
-        funds = constant.live_trade_funds
+        # 批量更新etf,lof基金
+        in_rt_time = (now.hour == 14) and (now.minute == 50)
+        # 14:50获取溢价信息
+        utils.update_fund_today(rt=in_rt_time)
+        qauto_live.run_strategy(funds)
+
+        # 从tushare获取数据,同步
         db = models.DB()
         dbname = 'k_5min_data'
         utils.asyncio_tasks(
-            qauto_live.asyncio_run_strategy,
+            qauto_live.asyncio_update_k_5min_data,
             tasks=funds,
             db=db,
             dbname=dbname,
@@ -134,18 +140,11 @@ def update_k_data_cron():
     )
 
 
-def update_index_daily_cron():
-    istradeday = utils.is_trade_day()
-    if not istradeday:
-        print('非交易日')
-        return
-    utils.update_index_daily()
-
-
 def start():
     # 测试
-    # trigger = CronTrigger(second='*/1')
-    # scheduler.add_job(test_cron, trigger=trigger)
+    # trigger = CronTrigger(second='*/5')
+    # trigger = CronTrigger(minute='*/2')
+    # scheduler.add_job(update_lof_k_data_cron, trigger=trigger, max_instances=1)
 
     # 更新分钟数据,策略下单使用
     # 自动打新,检查溢价
@@ -167,6 +166,7 @@ def start():
 
     trigger = CronTrigger(day_of_week='1,2,3,4,5', hour=22, minute=40)
     scheduler.add_job(update_k_data_cron, trigger=trigger)
+
     scheduler.start()
     scheduler.print_jobs()
 
@@ -179,6 +179,7 @@ def start():
 
 if __name__ == "__main__":
     print('start...')
-    start()
-    ioloop.IOLoop.instance().start()
+    # start()
+    # ioloop.IOLoop.instance().start()
+    update_k_5min_data_cron()
     print('end...')

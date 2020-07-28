@@ -143,6 +143,86 @@ class BaseStrategy(bt.Strategy):
                     print(msg)
                     self.prestop()
 
+    def next(self):
+        # 多周期下单
+        if self.p.optpass:
+            return
+
+        pretrades = self.get_pre_trades(days=0)
+        tradelst = []
+
+        for data in self.datas:
+            code = utils.get_code_string(data.code[0])
+            datadt = self.data.num2date(data.datetime[0])
+
+            # 处理k_5mindata
+            trade = pretrades.get(code, {})
+            strategy = self.__class__.__name__
+
+            if strategy in ['TWAPMultiStrategy', 'CMIStrategy']:
+                if trade:
+                    sma = self.sma[code]
+                    # 小周期突破均线入场,K线大于均线,上个K线小于均线
+                    flag = trade['flag']
+                    if data.close[0] >= sma[0] and data.close[-1] < sma[-1] and flag == 'buy':
+                        target = trade['target']
+                        size = self.get_target_size(data, target)
+                        self.order = self.buy(data=data, size=size)
+
+                    # 小周期,K线小于均线,上个K线大于均线
+                    if data.close[0] <= sma[0] and data.close[-1] > sma[-1] and flag == 'sell':
+                        target = 0
+                        size = self.get_target_size(data, target)
+                        self.order = self.sell(data=data, size=size)
+
+            elif strategy in ['SchedStrategy']:
+                intradetime = datadt.hour == 14 and datadt.minute == 45
+                # 构造当天数据,14:45时,根据此时收盘价进行判断
+                if intradetime and pretrades and trade:
+                    # islastrow = self.is_last_row(data, datadt)
+                    # if not islastrow:
+                    #     # 过滤不是最后一个5分钟
+                    #     continue
+
+                    flag = trade['flag']
+                    size = trade['size']
+                    if flag == 'buy':
+                        self.order = self.buy(data, size=size)
+                    elif flag == 'apply':
+                        price = trade['price']
+                        self.order = self.buy(
+                            data, size=size, price=price, exectype=bt.Order.Limit)
+                    else:
+                        self.order = self.sell(data, size=size)
+
+            # 过滤5分钟k线
+            if self.p.multiperiod in data._name:
+                continue
+
+            # 过滤多余k_data
+            dones = self.hasdones.get(code, [])
+            datalen = len(data)
+            if datalen in dones:
+                continue
+            dones.append(datalen)
+            self.hasdones.update({code: dones})
+
+            # 处理k_data
+            tradedict = self.next_one(code, datadt, data)
+            if tradedict.get('flag', ''):
+                print(tradedict)
+                tradelst.append(tradedict)
+
+        for trade in tradelst:
+            code = trade['code']
+            dt = trade['dt']
+            transaction = self.get_current_transaction(code, data)
+            tdt = transaction['dt']
+            # 订单过滤当天已购买
+            if tdt.date() == dt.date():
+                continue
+            self.pretrades.append(trade)
+
     def log(self, txt, dt=None):
         ''' 策略的日志函数'''
         if self.p.printlog:
@@ -310,6 +390,18 @@ class BaseStrategy(bt.Strategy):
                 data.datetime[0]) + timedelta(days=-30)
         return transaction
 
+    def is_last_row(self, data, datadt):
+        islastrow = utils.false
+        now = datetime.now()
+        if datadt.date() == now.date() and self.p._live:
+            # 当天订单,且实盘,只处理14:45时间
+            df = self.getdatabyname(data._name)
+            last = df.p.dataname.timestamp[-1]
+            tp = int(datadt.timestamp())
+            if last == tp:
+                islastrow = utils.true
+        return islastrow
+
     def is_trade_done(self, datadt, code):
         datadate = datadt.date()
         istradedone = utils.false
@@ -324,14 +416,14 @@ class BaseStrategy(bt.Strategy):
 
         return istradedone
 
-    def get_pre_trades(self):
+    def get_pre_trades(self, days=0):
         pretrades = {}
         tradelst = []
-        # 处理昨日订单
-        today = bt.num2date(self.data.datetime[0])
+        # 处理当天或者昨日订单,0:今天,-1:昨天
+        today = bt.num2date(self.data.datetime[0]) + timedelta(days=days)
         for trade in self.pretrades:
-            datetime = trade['datetime']
-            if today.timestamp() - datetime.timestamp() > 60*60*24:
+            dt = trade['dt']
+            if today.date() != dt.date():
                 continue
             tradelst.append(trade)
 
@@ -1025,12 +1117,60 @@ class TWAPMultiStrategy(BaseStrategy):
         self.hasdones = {}  # 加入不同周期,实盘接入,具体交易逻辑
         self.pretrades = []  # 记录长周期下单记录,用于第二天下单依据
         super(TWAPMultiStrategy, self).__init__()
-
+    
     def next(self):
-        # 获取昨日订单
-        pretrades = self.get_pre_trades()
+        self.next_backup()
+        # super(TWAPMultiStrategy, self).next()
 
+    def next_one(self, code, datadt, data):
+        twap = self.twap[code]
+        D = self.D[code]
+        mom = self.mom[code]
+        atr = self.atr[code]
+
+        tradedict = dict(
+            data=data,
+            code=code,
+            mom=mom[0],
+            dt=datadt,
+        )
+        pos = self.get_postion(code)
+        haspos = utils.false
+        if pos and pos.size > 0:
+            haspos = utils.true
+
+        # print(code, datetime, data._name, twap[0], twap[-1], data.close[0], data.close[-1])
+
+        if (twap[0] <= data.close[0] and twap[-1] > data.close[-1]) and not haspos:
+            # 进场,未持仓
+            if D[0] < 80:
+                tradedict['flag'] = 'buy'
+                self.buytimes[code] = 1
+
+        if self.p.weightflag == 'add':
+            if (atr[0] >= atr[-1]) and haspos:
+                # 分批进仓时加仓,已持仓,本日真实价格波动均值大于昨日
+                # 效果不好???
+                if (D[0] < 80) and self.buytimes[code] < 3:
+                    # 加仓次数不超过2次,总共分三次入场
+                    tradedict['flag'] = 'buy'
+                    self.buytimes[code] += 1
+
+        if (twap[0] >= data.close[0] and twap[-1] > data.close[-1]) and haspos:
+            # 出场,未持仓则跳过本次卖出
+            if D[0] > 20:
+                tradedict['flag'] = 'sell'
+                self.buytimes[code] = 0
+        return tradedict
+
+    def next_backup(self):
+        if self.p.optpass:
+            return
+
+        if self.p.multiperiod:
+            pretrades = self.get_pre_trades(days=-1)
         tradelst = []
+
         for data in self.datas:
             code = utils.get_code_string(data.code[0])
             datadt = bt.num2date(data.datetime[0])
@@ -1080,7 +1220,7 @@ class TWAPMultiStrategy(BaseStrategy):
                 data=data,
                 code=code,
                 mom=mom[0],
-                datetime=datadt,
+                dt=datadt,
             )
             pos = self.get_postion(code)
             haspos = utils.false
@@ -1140,7 +1280,7 @@ class TWAPMultiStrategy(BaseStrategy):
         else:
             # 确定次序
             for trade in tradelst[:2]:
-                trade['datetime'] = bt.num2date(self.data.datetime[0])
+                trade['dt'] = bt.num2date(self.data.datetime[0])
                 self.pretrades.append(trade)
 
     def check_next(self, order):
@@ -1195,14 +1335,67 @@ class CMIStrategy(BaseStrategy):
         self.hasdones = {}  # 过滤填充的大周期行
         self.pretrades = []  # 获取昨日订单,在5分钟小周期下单
         super(CMIStrategy, self).__init__()
-
+    
     def next(self):
-        # 获取昨日订单
-        pretrades = {}
-        if self.p.multiperiod:
-            pretrades = self.get_pre_trades()
+        super(CMIStrategy, self).next()
+        # self.next_backup()
+    
+    def next_one(self, code, datadt, data):
+        cmi = self.cmi[code]
+        date = utils.get_datetime_date(datadt, flag='-')
 
+        # 评判当前趋势
+        tradedict = {}
+        if cmi[0] <= self.p.minperiod:
+            # 执行震荡策略
+            # cmi值如何确定???
+            # 趋势特征不明显分批建仓
+
+            self.p.weightflag = 'add'
+            tradedict = self.next_mtm(code, data)
+
+            key = 'mtmst'
+            if not hasattr(self, key):
+                setattr(self, key, [])
+            if tradedict.get('flag', ''):
+                self.__dict__[key].append(date)
+
+        elif self.p.maxperiod > cmi[0] > self.p.minperiod:
+            # 执行趋势策略
+            # 趋势特征明显不分批建仓
+
+            self.p.weightflag = 'one'
+            tradedict = self.next_twap(code, data)
+
+            key = 'twapst'
+            if not hasattr(self, key):
+                setattr(self, key, [])
+            if tradedict.get('flag', ''):
+                self.__dict__[key].append(date)
+
+        elif cmi[0] >= self.p.maxperiod:
+            # 牛市策略,长期持有,不使用加仓策略,价格相对便宜
+
+            self.p.weightflag = 'one'
+            tradedict = self.next_round(code, data)
+
+            key = 'roundst'
+            if not hasattr(self, key):
+                setattr(self, key, [])
+            if tradedict.get('flag', ''):
+                self.__dict__[key].append(date)
+
+        tradedict['dt'] = datadt
+        return tradedict
+
+    def next_backup(self):
+        if self.p.optpass:
+            return
+
+        if self.p.multiperiod:
+            pretrades = self.get_pre_trades(days=-1)
         tradelst = []
+
         for data in self.datas:
             code = utils.get_code_string(data.code[0])
             date = data.num2date(data.datetime[0])
@@ -1321,7 +1514,7 @@ class CMIStrategy(BaseStrategy):
         else:
             # 确定次序
             for trade in tradelst[:2]:
-                trade['datetime'] = bt.num2date(self.data.datetime[0])
+                trade['dt'] = bt.num2date(self.data.datetime[0])
                 self.pretrades.append(trade)
 
     def next_twap(self, code, data):
@@ -1555,7 +1748,7 @@ class FollowWestFundsStrategy(CMIStrategy):
             ]
             df = self.p.db.select(dbname, wheres=wheres)
             dfs.append(df)
-        df = utils.contact_pandas(dfs)
+        df = utils.pandas_contact(dfs)
         if df.empty:
             return []
         da = df.groupby(by='code').size()
@@ -1673,40 +1866,72 @@ class SchedStrategy(BaseStrategy):
         super(SchedStrategy, self).__init__()
 
     def next(self):
+        # self.next_backup()
+        super(SchedStrategy, self).next()
+
+    def next_one(self, code, datadt, data):
+        momosc = self.momosc[code]
+        pricerise = momosc[0]
+
+        tradedict = dict(
+            data=data,
+            code=code,
+            mom=pricerise,
+            dt=datadt,
+        )
+
+        # 盘中检查
+        if (pricerise < self.p.minrise or datadt.weekday() == 4):
+            # 检查今日是否已购买
+            size = self.get_trade_size(pricerise, 'buy')
+            tradedict['flag'] = 'buy'
+            tradedict['size'] = size
+
+        close = data.close[0]
+        rt = data.rt[0]
+        if rt > 1:
+            price = close - rt*close/100
+            print(rt, price, close)
+            # tradedict['flag'] = 'apply'
+
+        if pricerise > self.p.maxrise:
+            size = self.get_trade_size(pricerise, 'sell')
+            tradedict['flag'] = 'sell'
+            tradedict['size'] = size
+        return tradedict
+
+    def next_backup(self):
         if self.p.optpass:
             return
 
+        if self.p.multiperiod:
+            pretrades = self.get_pre_trades(days=0)
         tradelst = []
+
         for data in self.datas:
             code = utils.get_code_string(data.code[0])
             datadt = self.data.num2date(data.datetime[0])
 
             if self.p.multiperiod:
-                pretrades = self.get_pre_trades()
                 trade = pretrades.get(code, {})
                 intradetime = datadt.hour == 14 and datadt.minute == 45
                 # 构造当天数据,14:45时,根据此时收盘价进行判断
                 if intradetime and pretrades and trade:
-                    tdatadt = trade['datetime']
-                    if datadt.date() != tdatadt.date():
-                        # 过滤不是当天订单
-                        continue
-                    now = datetime.now()
-                    if datadt.date() == now.date() and self.p._live:
-                        # 当天订单,且实盘,只处理14:45时间
-                        df = self.getdatabyname(data._name)
-                        last = df.p.dataname.timestamp[-1]
-                        tp = int(datadt.timestamp())
-                        if last != tp:
-                            continue
+                    # islastrow = self.is_last_row(data, datadt)
+                    # if not islastrow:
+                    #     # 过滤不是最后一个5分钟
+                    #     continue
+
                     flag = trade['flag']
                     size = trade['size']
                     # print(trade)
                     if flag == 'buy':
-                        price = data.close[0]
-                        print(datadt, price)
                         self.order = self.buy(data, size=size)
-                        # self.order = self.buy(data, size=size, price=price, exectype=bt.Order.Limit)
+                    elif flag == 'apply':
+                        print(trade)
+                        price = trade['price']
+                        self.order = self.buy(
+                            data, size=size, price=price, exectype=bt.Order.Limit)
                     else:
                         self.order = self.sell(data, size=size)
                     continue
@@ -1727,29 +1952,42 @@ class SchedStrategy(BaseStrategy):
                 data=data,
                 code=code,
                 mom=pricerise,
-                datetime=datadt,
+                dt=datadt,
             )
-
-            # if (9 < dt.hour < 14) or (dt.hour >= 14 and dt.minute < 45):
 
             # 盘中检查
             if (pricerise < self.p.minrise or datadt.weekday() == 4):
                 # 检查今日是否已购买
-                tradesize = self.get_trade_size(pricerise, 'buy')
+                size = self.get_trade_size(pricerise, 'buy')
                 tradedict['flag'] = 'buy'
-                tradedict['size'] = tradesize
+                tradedict['size'] = size
                 tradelst.append(tradedict)
-                # import ipdb; ipdb.set_trace()
+
+            close = data.close[0]
+            rt = data.rt[0]
+            if rt > 1:
+                price = close - rt*close/100
+                print(rt, price, close)
+                # tradedict['flag'] = 'apply'
 
             if pricerise > self.p.maxrise:
-                tradesize = self.get_trade_size(pricerise, 'sell')
+                size = self.get_trade_size(pricerise, 'sell')
                 tradedict['flag'] = 'sell'
-                tradedict['size'] = tradesize
+                tradedict['size'] = size
                 tradelst.append(tradedict)
 
         if self.p.multiperiod:
             # 确定次序
             for trade in tradelst:
+                code = trade['code']
+                dt = trade['dt']
+                transaction = self.get_current_transaction(code, data)
+                tdt = transaction['dt']
+                size = trade['size']
+                # 订单过滤size==0,或者当天已购买
+                if tdt.date() == dt.date() or size == 0:
+                    continue
+                print(datadt, size)
                 self.pretrades.append(trade)
         else:
             for trade in tradelst:
@@ -1781,7 +2019,7 @@ class SchedStrategy(BaseStrategy):
             #             self.order = self.buy(size=tradesize)
             #             buycount += 1
             #             self.orders[buykey] = buycount
-
+    
     def get_d_times(self, flag):
         # 超买,超卖检查
         d_times = 1
